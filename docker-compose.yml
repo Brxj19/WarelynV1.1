@@ -1,0 +1,76 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: warelyn-mysql
+    environment:
+      MYSQL_DATABASE: warelyn_inventoryV1
+      MYSQL_USER: warelyn
+      MYSQL_PASSWORD: warelyn_dev_password
+      MYSQL_ROOT_PASSWORD: root_dev_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_dev_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: warelyn-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warelyn-backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      WARELYN_ENVIRONMENT: development
+      WARELYN_DATABASE_URL: mysql+pymysql://warelyn:warelyn_dev_password@mysql:3306/warelyn_inventory
+      WARELYN_CORS_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
+      WARELYN_JWT_SECRET_KEY: replace-with-a-long-random-secret
+      WARELYN_SUPER_ADMIN_EMAIL: admin@warelyn.local
+      WARELYN_SUPER_ADMIN_PASSWORD: ChangeMe123!
+      WARELYN_SUPER_ADMIN_NAME: Warelyn Super Admin
+      WARELYN_SEED_SUPER_ADMIN_ON_STARTUP: "true"
+      WARELYN_SMTP_HOST: mailhog
+      WARELYN_SMTP_PORT: "1025"
+      WARELYN_SMTP_USERNAME: ""
+      WARELYN_SMTP_PASSWORD: ""
+      WARELYN_SMTP_FROM_EMAIL: no-reply@warelyn.local
+      WARELYN_SMTP_FROM_NAME: Warelyn
+      WARELYN_SMTP_USE_TLS: "false"
+      WARELYN_SMTP_USE_SSL: "false"
+      WARELYN_EMAIL_DELIVERY_MODE: mailhog
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    container_name: warelyn-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8001/api
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  mysql-data:
+  frontend-node-modules:

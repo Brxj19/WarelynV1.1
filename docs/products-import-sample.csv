@@ -1,0 +1,6 @@
+name,sku,unit,barcode,description,category_name,brand_name,vendor_name,cost_price,selling_price,reorder_level,track_batch,track_expiry,track_serial,status
+Classic Cotton T-Shirt,APP-TSHIRT-001,pcs,8901000000010,Everyday crew neck cotton t-shirt,Apparel,Warelyn Basics,Fabric Supply Co,250.00,499.00,20,false,false,false,ACTIVE
+Arabica Coffee Beans 1kg,GROC-COFFEE-001,bag,8901000000011,Roasted whole arabica coffee beans,Grocery,Roast House,Bean Traders Pvt Ltd,420.00,699.00,15,true,true,false,ACTIVE
+Wireless Barcode Scanner,EQP-SCAN-001,pcs,8901000000012,Handheld bluetooth barcode scanner,Equipment,ScanPro,Tech Source India,1800.00,2499.00,5,false,false,true,ACTIVE
+Glass Water Bottle 750ml,HOME-BOTTLE-001,pcs,8901000000013,Borosilicate bottle with sleeve,Homeware,ClearLiving,Urban Supply LLP,190.00,349.00,12,false,false,false,ACTIVE
+Seasonal Gift Hamper,GIFT-HAMPER-001,box,8901000000014,Curated festive gift hamper,Gifting,FestiveLine,Gift Distributors,850.00,1299.00,8,true,false,false,INACTIVE
