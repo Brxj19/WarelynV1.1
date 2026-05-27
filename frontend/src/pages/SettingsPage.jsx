@@ -5,11 +5,13 @@ import { Link } from 'react-router-dom';
 import { Badge, StatusBadge } from '../components/ui/Badge.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
+import { CurrencySelect } from '../components/ui/CurrencySelect.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PhoneInput } from '../components/ui/PhoneInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import * as settingsService from '../services/settingsService.js';
 import * as verificationService from '../services/verificationService.js';
@@ -62,6 +64,7 @@ function FormatToolbar({ textareaRef, onBodyChange, body }) {
 
 function TenantSettingsSection({ accessToken }) {
   const toast = useToast();
+  const { refreshSettings } = useTenantSettings();
   const [settings, setSettings] = useState(null);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
@@ -121,6 +124,7 @@ function TenantSettingsSection({ accessToken }) {
       if (Object.keys(data).length > 0) {
         const updated = await settingsService.updateTenantSettings(accessToken, data);
         setSettings(updated);
+        refreshSettings();
         toast.success('Settings saved.');
       }
       setEditing(false);
@@ -175,7 +179,7 @@ function TenantSettingsSection({ accessToken }) {
               <Input label="Contact Email" type="email" value={form.contact_email} onChange={handleChange('contact_email')} disabled={!editing} />
               <PhoneInput label="Phone" value={form.phone} onChange={(val) => editing && setForm((p) => ({ ...p, phone: val }))} disabled={!editing} />
               <Input label="Timezone" value={form.timezone} onChange={handleChange('timezone')} disabled={!editing} />
-              <Input label="Currency" value={form.currency} onChange={handleChange('currency')} disabled={!editing} />
+              <CurrencySelect value={form.currency} onChange={(val) => setForm((p) => ({ ...p, currency: val }))} disabled={!editing} />
               <Input label="Tax ID" value={form.tax_id} onChange={handleChange('tax_id')} disabled={!editing} />
             </div>
           </div>

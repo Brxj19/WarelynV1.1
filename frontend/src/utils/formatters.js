@@ -37,14 +37,23 @@ export function formatDecimal(value, options = {}) {
   }).format(number);
 }
 
-export function formatMoney(value, options = {}) {
+export function formatMoney(value, currencyCode = 'USD', options = {}) {
   if (value === null || value === undefined || value === '') return '-';
   const number = Number(value);
   if (Number.isNaN(number)) return String(value);
-  return new Intl.NumberFormat(undefined, {
-    minimumFractionDigits: options.minimumFractionDigits ?? 2,
-    maximumFractionDigits: options.maximumFractionDigits ?? 2,
-  }).format(number);
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: options.minimumFractionDigits ?? 2,
+      maximumFractionDigits: options.maximumFractionDigits ?? 2,
+    }).format(number);
+  } catch {
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: options.minimumFractionDigits ?? 2,
+      maximumFractionDigits: options.maximumFractionDigits ?? 2,
+    }).format(number);
+  }
 }
 
 export function titleCaseStatus(value) {

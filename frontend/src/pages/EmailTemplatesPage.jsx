@@ -25,10 +25,12 @@ const VARIABLE_HELPERS = {
   INVOICE_EMAIL: [
     '{{invoice_number}}', '{{customer_name}}', '{{total}}', '{{due_date}}',
     '{{items}}', '{{tenant.company_name}}',
+    '{{currency_code}}', '{{currency_symbol}}',
   ],
   BILL_EMAIL: [
     '{{bill_number}}', '{{vendor_name}}', '{{total}}', '{{due_date}}',
     '{{items}}', '{{tenant.company_name}}',
+    '{{currency_code}}', '{{currency_symbol}}',
   ],
 };
 

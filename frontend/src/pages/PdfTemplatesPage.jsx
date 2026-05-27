@@ -71,11 +71,13 @@ const VARIABLE_HELPERS = {
     '{{invoice_number}}', '{{customer_name}}', '{{total}}', '{{due_date}}',
     '{{items}}', '{{tenant.company_name}}', '{{invoice_date}}', '{{subtotal}}',
     '{{tax_amount}}', '{{discount_amount}}', '{{notes}}',
+    '{{currency_code}}', '{{currency_symbol}}',
   ],
   BILL_PDF: [
     '{{bill_number}}', '{{vendor_name}}', '{{total}}', '{{due_date}}',
     '{{items}}', '{{tenant.company_name}}', '{{bill_date}}', '{{subtotal}}',
     '{{tax_amount}}', '{{notes}}',
+    '{{currency_code}}', '{{currency_symbol}}',
   ],
 };
 

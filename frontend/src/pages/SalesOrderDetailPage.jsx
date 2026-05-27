@@ -17,6 +17,7 @@ import { TableShell } from '../components/ui/TableShell.jsx';
 import { WorkflowProgress } from '../components/ui/WorkflowProgress.jsx';
 import { formatDate, formatDecimal, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as catalogService from '../services/catalogService.js';
 import * as fulfillmentService from '../services/fulfillmentService.js';
 import * as salesService from '../services/salesService.js';
@@ -37,6 +38,7 @@ const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-whi
 export function SalesOrderDetailPage() {
   const { id } = useParams();
   const { accessToken, user } = useAuth();
+  const { currency } = useTenantSettings();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [fulfillments, setFulfillments] = useState([]);

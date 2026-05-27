@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.utils.currency import validate_currency_code
 
 
 class TenantSettingsRead(BaseModel):
@@ -45,6 +47,13 @@ class TenantSettingsUpdate(BaseModel):
     over_receive_tolerance: str | None = None
     document_logo_url: str | None = None
     document_footer: str | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def currency_must_be_supported(cls, v: str | None) -> str | None:
+        if v is not None and not validate_currency_code(v):
+            raise ValueError(f"Unsupported currency code '{v}'. Use a valid ISO 4217 code from the supported list.")
+        return v.upper() if v else v
 
 
 class UserPreferencesRead(BaseModel):

@@ -1,0 +1,36 @@
+export const CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', symbol: '$', decimalPlaces: 2 },
+  { code: 'EUR', name: 'Euro', symbol: '€', decimalPlaces: 2 },
+  { code: 'GBP', name: 'British Pound', symbol: '£', decimalPlaces: 2 },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹', decimalPlaces: 2 },
+  { code: 'JPY', name: 'Japanese Yen', symbol: '¥', decimalPlaces: 0 },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'CA$', decimalPlaces: 2 },
+  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', decimalPlaces: 2 },
+  { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', decimalPlaces: 2 },
+  { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', decimalPlaces: 2 },
+  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', decimalPlaces: 2 },
+  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', decimalPlaces: 2 },
+  { code: 'BRL', name: 'Brazilian Real', symbol: 'R$', decimalPlaces: 2 },
+  { code: 'MXN', name: 'Mexican Peso', symbol: 'MX$', decimalPlaces: 2 },
+  { code: 'ZAR', name: 'South African Rand', symbol: 'R', decimalPlaces: 2 },
+  { code: 'NGN', name: 'Nigerian Naira', symbol: '₦', decimalPlaces: 2 },
+  { code: 'KES', name: 'Kenyan Shilling', symbol: 'KSh', decimalPlaces: 2 },
+  { code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', decimalPlaces: 0 },
+  { code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM', decimalPlaces: 2 },
+  { code: 'PHP', name: 'Philippine Peso', symbol: '₱', decimalPlaces: 2 },
+  { code: 'THB', name: 'Thai Baht', symbol: '฿', decimalPlaces: 2 },
+  { code: 'SEK', name: 'Swedish Krona', symbol: 'kr', decimalPlaces: 2 },
+  { code: 'NOK', name: 'Norwegian Krone', symbol: 'kr', decimalPlaces: 2 },
+  { code: 'DKK', name: 'Danish Krone', symbol: 'kr', decimalPlaces: 2 },
+  { code: 'NZD', name: 'New Zealand Dollar', symbol: 'NZ$', decimalPlaces: 2 },
+  { code: 'HKD', name: 'Hong Kong Dollar', symbol: 'HK$', decimalPlaces: 2 },
+  { code: 'PKR', name: 'Pakistani Rupee', symbol: '₨', decimalPlaces: 2 },
+  { code: 'EGP', name: 'Egyptian Pound', symbol: 'E£', decimalPlaces: 2 },
+  { code: 'TRY', name: 'Turkish Lira', symbol: '₺', decimalPlaces: 2 },
+  { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', decimalPlaces: 2 },
+  { code: 'QAR', name: 'Qatari Riyal', symbol: '﷼', decimalPlaces: 2 },
+];
+
+export function getCurrencyInfo(code) {
+  return CURRENCIES.find((c) => c.code === code) || null;
+}

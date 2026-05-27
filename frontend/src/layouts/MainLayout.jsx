@@ -11,6 +11,7 @@ import { TopbarSearch } from '../components/TopbarSearch.jsx';
 import { activeGroupFor, flattenNav, resolveRouteMeta } from '../components/navigation.js';
 import { Button } from '../components/ui/Button.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
+import { TenantSettingsProvider } from '../context/TenantSettingsContext.jsx';
 import { setGlobalErrorHandler } from '../services/apiClient.js';
 import { useToast } from '../hooks/useToast.jsx';
 
@@ -54,6 +55,7 @@ export function MainLayout() {
   }, [toast]);
 
   return (
+    <TenantSettingsProvider>
     <div className={`app-shell ${isCollapsed ? 'sidebar-collapsed' : ''}`}>
       <header className="topbar">
         <div className="topbar-left">
@@ -191,5 +193,6 @@ export function MainLayout() {
         </main>
       </div>
     </div>
+    </TenantSettingsProvider>
   );
 }

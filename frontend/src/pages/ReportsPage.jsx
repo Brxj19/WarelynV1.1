@@ -13,6 +13,7 @@ import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDate, formatDateTime, formatDecimal, formatMoney, titleCaseStatus } from '../utils/formatters.js';
 import { getNextSort, inferSortType, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as reportsService from '../services/reportsService.js';
 
 export const reportLinks = [
@@ -71,6 +72,7 @@ export function ReportsPage() {
 
 export function SimpleReportPage({ columns, description, filters = [], load, loadRows, normalize = (row) => row, summary, title }) {
   const { accessToken } = useAuth();
+  const { currency } = useTenantSettings();
   const [data, setData] = useState(null);
   const [query, setQuery] = useState({});
   const [search, setSearch] = useState('');
@@ -280,7 +282,7 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
               <tr key={row.id ?? index}>
                 {columns.map((column) => (
                   <td className={(column.numeric ?? inferSortType(column.key) === 'number') ? 'number-cell whitespace-nowrap' : 'whitespace-nowrap'} key={column.key}>
-                    {renderReportCell(row[column.key], column.key)}
+                    {renderReportCell(row[column.key], column.key, currency)}
                   </td>
                 ))}
               </tr>
@@ -292,13 +294,13 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
   );
 }
 
-function renderReportCell(value, key) {
+function renderReportCell(value, key, currency) {
   if (value === null || value === undefined || value === '') return '-';
   if (key.includes('created_at')) return formatDateTime(value);
   if (key.endsWith('_date') || key === 'expiry_date' || key === 'order_date') return formatDate(value);
   if (key.includes('status') || key === 'movement_type' || key === 'reference_type') return <StatusBadge status={value}>{titleCaseStatus(value)}</StatusBadge>;
   if (['sku', 'barcode', 'ledger_id', 'reference_id', 'batch_number', 'serial_number'].includes(key)) return <span className="mono-cell">{value}</span>;
-  if (key.includes('value') || key.includes('cost') || key.includes('price')) return formatMoney(value);
+  if (key.includes('value') || key.includes('cost') || key.includes('price')) return formatMoney(value, currency);
   if (key.includes('quantity') || key.includes('on_hand') || key.includes('reserved') || key.includes('available') || key.includes('delta')) return formatDecimal(value);
   return value;
 }

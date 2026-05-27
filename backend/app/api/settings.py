@@ -7,9 +7,16 @@ from app.models.auth import UserRole
 from app.schemas.settings import TenantSettingsRead, TenantSettingsUpdate, UserPreferencesRead, UserPreferencesUpdate
 from app.services.auth import UserContext
 from app.services.settings import TenantSettingsService, UserPreferencesService
+from app.utils.currency import SUPPORTED_CURRENCIES
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 tenant_admin_roles = (UserRole.TENANT_ADMIN,)
+read_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER, UserRole.PURCHASE_STAFF, UserRole.SALES_STAFF, UserRole.VIEWER)
+
+
+@router.get("/currencies")
+def list_currencies(context: UserContext = Depends(require_roles(*read_roles))) -> list[dict]:
+    return [{"code": code, **info} for code, info in SUPPORTED_CURRENCIES.items()]
 
 
 @router.get("/tenant", response_model=TenantSettingsRead)

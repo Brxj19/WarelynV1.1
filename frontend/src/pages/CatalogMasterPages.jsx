@@ -18,6 +18,7 @@ import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatMoney } from '../utils/formatters.js';
 import { getNextSort, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as catalogService from '../services/catalogService.js';
 import { MasterDataFormPage, MasterDataListPage } from './MasterDataPage.jsx';
 
@@ -58,6 +59,7 @@ const productTrackingOptions = [
 
 export function ProductsPage() {
   const { accessToken, user } = useAuth();
+  const { currency } = useTenantSettings();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -273,7 +275,7 @@ export function ProductsPage() {
                 <td>{brandsById[product.brand_id]?.name ?? '-'}</td>
                 <td>{trackingLabel(product)}</td>
                 <td className="number-cell">{product.reorder_level ?? '-'}</td>
-                <td className="number-cell">{formatMoney(product.cost_price)}</td>
+                <td className="number-cell">{formatMoney(product.cost_price, currency)}</td>
                 <td><StatusBadge status={product.status ?? 'ACTIVE'}>{product.status ?? 'ACTIVE'}</StatusBadge></td>
               </tr>
             ))}

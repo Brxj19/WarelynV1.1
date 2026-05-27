@@ -14,6 +14,7 @@ import { TableShell } from '../components/ui/TableShell.jsx';
 import { WorkflowProgress } from '../components/ui/WorkflowProgress.jsx';
 import { formatDate, formatDecimal, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as purchasingService from '../services/purchasingService.js';
 import * as documentService from '../services/documentService.js';
 
@@ -25,6 +26,7 @@ const purchaseSteps = [{ key: 'DRAFT', label: 'Draft' }, { key: 'SUBMITTED', lab
 export function PurchaseOrderDetailPage() {
   const { id } = useParams();
   const { accessToken, user } = useAuth();
+  const { currency } = useTenantSettings();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [receipts, setReceipts] = useState([]);
@@ -149,7 +151,7 @@ export function PurchaseOrderDetailPage() {
                     <td className="number-cell">{formatDecimal(item.ordered_quantity)}</td>
                     <td className="number-cell">{formatDecimal(item.received_quantity)}</td>
                     <td className="number-cell">{formatDecimal(remaining)}</td>
-                    <td className="number-cell">{formatMoney(item.unit_cost)}</td>
+                    <td className="number-cell">{formatMoney(item.unit_cost, currency)}</td>
                   </tr>
                 );
               })}

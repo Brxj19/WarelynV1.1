@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 14
 
-    super_admin_email: str = "admin@warelyn.local"
+    super_admin_email: str = "admin@warelyn.dev"
     super_admin_password: str = "ChangeMe123!"
     super_admin_name: str = "Warelyn Super Admin"
-    seed_super_admin_on_startup: bool = False
+    seed_super_admin_on_startup: bool = True
 
     smtp_host: str = "localhost"
     smtp_port: int = 1025

@@ -15,6 +15,7 @@ import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDecimal, formatMoney } from '../utils/formatters.js';
 import { getNextSort, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER']);
 
@@ -37,6 +38,7 @@ export function MasterDataListPage({
   title,
 }) {
   const { accessToken, user } = useAuth();
+  const { currency } = useTenantSettings();
   const navigate = useNavigate();
   const [records, setRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,7 +200,7 @@ export function MasterDataListPage({
                   {fields.map((field, index) => {
                     const content = customCellRender
                       ? customCellRender(record[field.name], field, record)
-                      : renderCell(record[field.name], field);
+                      : renderCell(record[field.name], field, currency);
                     const rowUrl = index === 0 && rowLink ? rowLink(record) : null;
                     return (
                       <td className={field.numeric ? 'number-cell' : ''} key={field.name}>
@@ -333,10 +335,10 @@ function defaultValueForField(field) {
   return field.type === 'checkbox' ? false : '';
 }
 
-function renderCell(value, field) {
+function renderCell(value, field, currency) {
   if (value === null || value === undefined || value === '') return '-';
   if (['sku', 'barcode', 'gst_number', 'code'].includes(field.name)) return <span className="mono-cell">{value}</span>;
   if (field.name === 'reorder_level') return formatDecimal(value);
-  if (field.money) return formatMoney(value);
+  if (field.money) return formatMoney(value, currency);
   return value;
 }

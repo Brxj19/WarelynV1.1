@@ -14,6 +14,7 @@ import { TableShell } from '../components/ui/TableShell.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDate, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as fulfillmentService from '../services/fulfillmentService.js';
 import * as purchasingService from '../services/purchasingService.js';
 import * as reportsService from '../services/reportsService.js';
@@ -38,6 +39,7 @@ function ActionList({ emptyDescription, emptyTitle, illustration, items, renderI
 
 export function DashboardPage() {
   const { accessToken, logout, tenant, user } = useAuth();
+  const { currency } = useTenantSettings();
   const [dashboard, setDashboard] = useState(null);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
@@ -132,7 +134,7 @@ export function DashboardPage() {
                 </div>
                 <p className="metric-link-card-label">{label}</p>
                 <p className="metric-link-card-value">
-                  {typeof value === 'number' && key === 'total_stock_value_cost' ? formatMoney(value) : value}
+                  {typeof value === 'number' && key === 'total_stock_value_cost' ? formatMoney(value, currency) : value}
                   {TrendIcon && <TrendIcon className={`ml-1.5 inline ${trendColor}`} size={16} />}
                 </p>
                 <p className="metric-link-card-copy">{description}</p>

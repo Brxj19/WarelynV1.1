@@ -23,6 +23,7 @@ from app.models.returns import BlockedReturnStock, BlockedReturnStockStatus, Ret
 from app.models.sales import SalesFulfillment, SalesFulfillmentItem, SalesFulfillmentStatus, SalesOrder, SalesOrderItem, SalesOrderStatus
 from app.models.operations import OutboxEvent, OutboxEventStatus, PutawayTask, PutawayTaskStatus, ReorderRule, StockCountLine, StockCountSession, StockCountSessionStatus
 from app.models.settings import TenantSettings, UserPreferences
+from app.models.workflow import WorkflowEvent, WorkflowTask, WorkflowTaskPriority, WorkflowTaskStatus
 
 __all__ = [
     "AuditLog",
@@ -113,4 +114,8 @@ __all__ = [
     "StockCountLine",
     "StockCountSession",
     "StockCountSessionStatus",
+    "WorkflowEvent",
+    "WorkflowTask",
+    "WorkflowTaskPriority",
+    "WorkflowTaskStatus",
 ]

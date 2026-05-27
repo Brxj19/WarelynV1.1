@@ -20,6 +20,7 @@ class InventorySummaryReport(BaseModel):
     expired_batch_count: int
     damaged_blocked_qc_count: int
     reconciliation_mismatch_count: int
+    currency_code: str = "USD"
 
 
 class WarehouseStockReportRow(BaseModel):
@@ -97,6 +98,7 @@ class ReorderSuggestionRow(BaseModel):
 class ProductValuationReport(BaseModel):
     total_stock_value: Decimal
     total_units: Decimal
+    currency_code: str = "USD"
     rows: list[WarehouseStockReportRow]
 
 

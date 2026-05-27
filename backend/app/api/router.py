@@ -23,6 +23,7 @@ from app.api.uploads import router as uploads_router
 from app.api.users import router as users_router
 from app.api.verification import router as verification_router
 from app.api.warehouses import router as warehouses_router
+from app.api.workflow import router as workflow_router
 
 api_router = APIRouter()
 api_router.include_router(admin_router)
@@ -48,3 +49,4 @@ api_router.include_router(uploads_router)
 api_router.include_router(users_router)
 api_router.include_router(verification_router)
 api_router.include_router(warehouses_router)
+api_router.include_router(workflow_router)

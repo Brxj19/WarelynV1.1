@@ -14,6 +14,7 @@ import { TableShell } from '../components/ui/TableShell.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDate, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as documentService from '../services/documentService.js';
 
 function saveBlob(blob, filename) {
@@ -27,6 +28,7 @@ function saveBlob(blob, filename) {
 
 export function InvoicesPage() {
   const { accessToken } = useAuth();
+  const { currency } = useTenantSettings();
   const [invoices, setInvoices] = useState([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -80,7 +82,7 @@ export function InvoicesPage() {
                 <td><StatusBadge status={invoice.status}>{invoice.status}</StatusBadge></td>
                 <td>{formatDate(invoice.issue_date)}</td>
                 <td>{invoice.due_date ? formatDate(invoice.due_date) : '-'}</td>
-                <td className="number-cell">{formatMoney(invoice.total_amount)}</td>
+                <td className="number-cell">{formatMoney(invoice.total_amount, currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -164,8 +166,8 @@ export function InvoiceDetailPage() {
         status={<StatusBadge status={invoice.status}>{invoice.status}</StatusBadge>}
         summary={[
           { label: 'Lines', value: invoice.items.length, helper: 'Billed item count' },
-          { label: 'Subtotal', value: formatMoney(invoice.subtotal_amount), helper: 'Before tax/discount' },
-          { label: 'Total', value: formatMoney(invoice.total_amount), helper: 'Document total' },
+          { label: 'Subtotal', value: formatMoney(invoice.subtotal_amount, invoice.currency || 'USD'), helper: 'Before tax/discount' },
+          { label: 'Total', value: formatMoney(invoice.total_amount, invoice.currency || 'USD'), helper: 'Document total' },
         ]}
         title={invoice.invoice_number}
       >
@@ -184,8 +186,8 @@ export function InvoiceDetailPage() {
                 <tr key={item.id}>
                   <td>{item.description}</td>
                   <td className="number-cell">{item.quantity}</td>
-                  <td className="number-cell">{formatMoney(item.unit_price)}</td>
-                  <td className="number-cell">{formatMoney(item.line_total)}</td>
+                  <td className="number-cell">{formatMoney(item.unit_price, invoice.currency || 'USD')}</td>
+                  <td className="number-cell">{formatMoney(item.line_total, invoice.currency || 'USD')}</td>
                 </tr>
               ))}
             </tbody>
@@ -198,6 +200,7 @@ export function InvoiceDetailPage() {
 
 export function BillsPage() {
   const { accessToken } = useAuth();
+  const { currency } = useTenantSettings();
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -251,7 +254,7 @@ export function BillsPage() {
                 <td><StatusBadge status={bill.status}>{bill.status}</StatusBadge></td>
                 <td>{formatDate(bill.issue_date)}</td>
                 <td>{bill.due_date ? formatDate(bill.due_date) : '-'}</td>
-                <td className="number-cell">{formatMoney(bill.total_amount)}</td>
+                <td className="number-cell">{formatMoney(bill.total_amount, currency)}</td>
               </tr>
             ))}
           </tbody>
@@ -335,8 +338,8 @@ export function BillDetailPage() {
         status={<StatusBadge status={bill.status}>{bill.status}</StatusBadge>}
         summary={[
           { label: 'Lines', value: bill.items.length, helper: 'Billed item count' },
-          { label: 'Subtotal', value: formatMoney(bill.subtotal_amount), helper: 'Before tax/discount' },
-          { label: 'Total', value: formatMoney(bill.total_amount), helper: 'Document total' },
+          { label: 'Subtotal', value: formatMoney(bill.subtotal_amount, bill.currency || 'USD'), helper: 'Before tax/discount' },
+          { label: 'Total', value: formatMoney(bill.total_amount, bill.currency || 'USD'), helper: 'Document total' },
         ]}
         title={bill.bill_number}
       >
@@ -355,8 +358,8 @@ export function BillDetailPage() {
                 <tr key={item.id}>
                   <td>{item.description}</td>
                   <td className="number-cell">{item.quantity}</td>
-                  <td className="number-cell">{formatMoney(item.unit_cost)}</td>
-                  <td className="number-cell">{formatMoney(item.line_total)}</td>
+                  <td className="number-cell">{formatMoney(item.unit_cost, bill.currency || 'USD')}</td>
+                  <td className="number-cell">{formatMoney(item.line_total, bill.currency || 'USD')}</td>
                 </tr>
               ))}
             </tbody>

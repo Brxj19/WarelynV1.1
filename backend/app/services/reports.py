@@ -15,6 +15,7 @@ from app.models.returns import BlockedReturnStockStatus, SalesReturnStatus
 from app.models.sales import SalesOrderStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.reports import ReportsRepository
+from app.repositories.settings import TenantSettingsRepository
 
 ZERO = Decimal("0")
 BLOCKED_BATCH_STATUSES = {InventoryBatchStatus.QC_HOLD, InventoryBatchStatus.DAMAGED, InventoryBatchStatus.EXPIRED, InventoryBatchStatus.QUARANTINE, InventoryBatchStatus.SCRAPPED}
@@ -25,6 +26,11 @@ class ReportsService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repository = ReportsRepository(db)
+        self.settings_repository = TenantSettingsRepository(db)
+
+    def _tenant_currency(self, tenant_id: int) -> str:
+        settings = self.settings_repository.get_by_tenant(tenant_id)
+        return settings.currency if settings and settings.currency else "USD"
 
     def inventory_summary(self, tenant_id: int) -> dict[str, Any]:
         products = self.repository.products(tenant_id)
@@ -52,6 +58,7 @@ class ReportsService:
             "expired_batch_count": len([batch for batch in batches if batch.expiry_date and batch.expiry_date < today]),
             "damaged_blocked_qc_count": len(blocked),
             "reconciliation_mismatch_count": reconciliation["mismatch_count"],
+            "currency_code": self._tenant_currency(tenant_id),
         }
 
     def warehouse_stock(self, tenant_id: int, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -175,7 +182,7 @@ class ReportsService:
 
     def product_valuation(self, tenant_id: int, filters: dict[str, Any] | None = None) -> dict[str, Any]:
         rows = self.warehouse_stock(tenant_id, filters)
-        return {"total_stock_value": sum((row["stock_value"] for row in rows), ZERO), "total_units": sum((row["on_hand"] for row in rows), ZERO), "rows": rows}
+        return {"total_stock_value": sum((row["stock_value"] for row in rows), ZERO), "total_units": sum((row["on_hand"] for row in rows), ZERO), "currency_code": self._tenant_currency(tenant_id), "rows": rows}
 
     def batch_expiry(self, tenant_id: int, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         filters = filters or {}
