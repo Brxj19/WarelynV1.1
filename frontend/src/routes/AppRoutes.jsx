@@ -18,6 +18,7 @@ const BatchExpiryReportPage = lazy(() => import('../pages/BatchExpiryReportPage.
 const BlockedStockReportPage = lazy(() => import('../pages/BlockedStockReportPage.jsx').then(m => ({ default: m.BlockedStockReportPage })));
 const CatalogMasterPages = lazy(() => import('../pages/CatalogMasterPages.jsx'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage.jsx').then(m => ({ default: m.DashboardPage })));
+const MyTasksPage = lazy(() => import('../pages/MyTasksPage.jsx').then(m => ({ default: m.MyTasksPage })));
 const DocumentsPages = lazy(() => import('../pages/DocumentsPages.jsx'));
 const EmailTemplatesPage = lazy(() => import('../pages/EmailTemplatesPage.jsx').then(m => ({ default: m.EmailTemplatesPage })));
 const InventorySummaryReportPage = lazy(() => import('../pages/InventorySummaryReportPage.jsx').then(m => ({ default: m.InventorySummaryReportPage })));
@@ -98,18 +99,19 @@ export function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="my-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF']}><MyTasksPage /></RoleGuard>} />
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="catalog/products" element={<LazyProductsPage />} />
-            <Route path="catalog/products/new" element={<LazyProductFormPage />} />
-            <Route path="catalog/products/import" element={<ProductImportPage />} />
+            <Route path="catalog/products/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyProductFormPage /></RoleGuard>} />
+            <Route path="catalog/products/import" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><ProductImportPage /></RoleGuard>} />
             <Route path="catalog/categories" element={<LazyCategoriesPage />} />
-            <Route path="catalog/categories/new" element={<LazyCategoryFormPage />} />
+            <Route path="catalog/categories/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyCategoryFormPage /></RoleGuard>} />
             <Route path="catalog/brands" element={<LazyBrandsPage />} />
-            <Route path="catalog/brands/new" element={<LazyBrandFormPage />} />
+            <Route path="catalog/brands/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyBrandFormPage /></RoleGuard>} />
             <Route path="catalog/vendors" element={<LazyVendorsPage />} />
-            <Route path="catalog/vendors/new" element={<LazyVendorFormPage />} />
+            <Route path="catalog/vendors/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyVendorFormPage /></RoleGuard>} />
             <Route path="catalog/customers" element={<LazyCustomersPage />} />
-            <Route path="catalog/customers/new" element={<LazyCustomerFormPage />} />
+            <Route path="catalog/customers/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyCustomerFormPage /></RoleGuard>} />
             <Route path="warehouses" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER']}><LazyWarehousesPage /></RoleGuard>} />
             <Route path="warehouses/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyWarehouseFormPage /></RoleGuard>} />
             <Route path="warehouses/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER']}><WarehouseDetailPage /></RoleGuard>} />

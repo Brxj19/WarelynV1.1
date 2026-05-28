@@ -10,7 +10,9 @@ from app.models.inventory import ReferenceType, ReservationStatus
 from app.models.sales import SalesFulfillment, SalesFulfillmentStatus, SalesOrder, SalesOrderItem, SalesOrderStatus
 from app.repositories.fulfillment import FulfillmentRepository
 from app.repositories.sales import SalesRepository
+from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.workflow import WorkflowService
 
 FULFILLABLE_STATUSES = {SalesOrderStatus.CONFIRMED, SalesOrderStatus.PARTIALLY_FULFILLED}
 ZERO = Decimal("0")
@@ -99,6 +101,23 @@ class SalesService:
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("SALES_ORDER_CONFIRM_FAILED", "Sales order confirmation failed because of duplicate or invalid data.", 409) from exc
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "SALES_ORDER_CONFIRMED", "sales_order", order.id, actor_id, {"order_number": order.order_number})
+            workflow.create_task(tenant_id, WorkflowTaskCreate(
+                workflow_type="SALES",
+                entity_type="sales_order",
+                entity_id=order.id,
+                step_key="PICK_ORDER",
+                title=f"Pick items for order {order.order_number}",
+                description="Sales order confirmed. Pick and reserve required stock.",
+                assigned_role="INVENTORY_MANAGER",
+                priority="NORMAL",
+                action_url=f"/sales/{order.id}",
+            ), created_by=actor_id)
+            self.db.commit()
+        except Exception:
+            pass
         return {"sales_order": self.get_sales_order(tenant_id, order.id), "fulfillment": None, "stock_results": stock_results}
 
     def cancel_sales_order(self, tenant_id: int, actor_id: int, order_id: int, values: dict[str, Any] | None = None) -> SalesOrder:
@@ -109,10 +128,22 @@ class SalesService:
         if order.status == SalesOrderStatus.DRAFT:
             order.status = SalesOrderStatus.CANCELLED
             order.cancelled_at = datetime.now(UTC)
-            return self._commit_and_get_order(tenant_id, order.id)
+            result = self._commit_and_get_order(tenant_id, order.id)
+            try:
+                WorkflowService(self.db).cancel_entity_tasks(tenant_id, "sales_order", order.id)
+                self.db.commit()
+            except Exception:
+                pass
+            return result
         if order.status not in {SalesOrderStatus.CONFIRMED, SalesOrderStatus.PARTIALLY_FULFILLED}:
             raise AppError("INVALID_SALES_ORDER_STATE", "Only draft, confirmed, or partially fulfilled sales orders can be cancelled.", 409)
-        return self._release_and_mark_order(tenant_id, actor_id, order, SalesOrderStatus.CANCELLED, "cancelled_at", values)
+        result = self._release_and_mark_order(tenant_id, actor_id, order, SalesOrderStatus.CANCELLED, "cancelled_at", values)
+        try:
+            WorkflowService(self.db).cancel_entity_tasks(tenant_id, "sales_order", order.id)
+            self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def close_sales_order(self, tenant_id: int, actor_id: int, order_id: int, values: dict[str, Any] | None = None) -> SalesOrder:
         values = values or {}
@@ -213,6 +244,23 @@ class SalesService:
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("SALES_FULFILLMENT_COMMIT_FAILED", "Sales fulfillment commit failed because of duplicate or invalid data.", 409) from exc
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "SALES_FULFILLMENT_COMMITTED", "sales_fulfillment", fulfillment.id, actor_id, {"sales_order_id": order.id})
+            workflow.create_task(tenant_id, WorkflowTaskCreate(
+                workflow_type="SALES",
+                entity_type="sales_order",
+                entity_id=order.id,
+                step_key="CREATE_INVOICE",
+                title=f"Create and send invoice for fulfilled order {order.order_number}",
+                description="Fulfillment committed. Create invoice and send to customer.",
+                assigned_role="SALES_STAFF",
+                priority="NORMAL",
+                action_url=f"/invoices/new?sales_order_id={order.id}",
+            ), created_by=actor_id)
+            self.db.commit()
+        except Exception:
+            pass
         return {"sales_order": self.get_sales_order(tenant_id, order.id), "fulfillment": self.get_fulfillment(tenant_id, fulfillment.id), "stock_results": stock_results}
 
     def _replace_order_items(self, tenant_id: int, order_id: int, items: list[dict[str, Any]]) -> None:

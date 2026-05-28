@@ -10,6 +10,8 @@ from app.models.inventory import InventoryBatch, InventoryBatchStatus, MovementT
 from app.models.operations import PutawayTask, PutawayTaskStatus, StockCountSession, StockCountSessionStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.operations import CycleCountRepository, OutboxRepository, PutawayTaskRepository, ReorderRuleRepository
+from app.schemas.workflow import WorkflowTaskCreate
+from app.services.workflow import WorkflowService
 
 
 class ReorderRuleService:
@@ -85,6 +87,28 @@ class PutawayTaskService:
         task.completed_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(task)
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "PUTAWAY_COMPLETED", "putaway_task", task.id, None, {"receipt_id": task.receipt_id})
+            if task.receipt_id:
+                workflow.cancel_entity_tasks(tenant_id, "purchase_receipt", task.receipt_id)
+                from app.repositories.purchasing import PurchasingRepository
+                receipt = PurchasingRepository(self.db).get_receipt(tenant_id, task.receipt_id)
+                if receipt and receipt.purchase_order_id:
+                    workflow.create_task(tenant_id, WorkflowTaskCreate(
+                        workflow_type="PURCHASING",
+                        entity_type="purchase_order",
+                        entity_id=receipt.purchase_order_id,
+                        step_key="RECORD_BILL",
+                        title=f"Record bill for received PO",
+                        description="Putaway complete. Record vendor bill for this purchase order.",
+                        assigned_role="PURCHASE_STAFF",
+                        priority="NORMAL",
+                        action_url=f"/bills/new?purchase_order_id={receipt.purchase_order_id}",
+                    ))
+            self.db.commit()
+        except Exception:
+            pass
         return task
 
     def cancel(self, tenant_id: int, task_id: int):

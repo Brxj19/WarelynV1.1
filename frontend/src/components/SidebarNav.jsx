@@ -1,15 +1,41 @@
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 
 import { AppLogo } from './AppLogo.jsx';
 import { activeGroupFor, getVisibleNavGroups, isItemActive } from './navigation.js';
+import { useAuth } from '../context/AuthContext.jsx';
+import * as workflowService from '../services/workflowService.js';
+
+function useMyTaskCount() {
+  const { accessToken, user } = useAuth();
+  const [count, setCount] = useState(0);
+  const intervalRef = useRef(null);
+  const nonViewerRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF'];
+
+  const fetch = useCallback(async () => {
+    if (!accessToken || !nonViewerRoles.includes(user?.role)) return;
+    try {
+      const c = await workflowService.getMyTaskCount(accessToken);
+      setCount(c);
+    } catch { /* ignore */ }
+  }, [accessToken, user?.role]);
+
+  useEffect(() => {
+    fetch();
+    intervalRef.current = setInterval(fetch, 60000);
+    return () => clearInterval(intervalRef.current);
+  }, [fetch]);
+
+  return count;
+}
 
 export function SidebarNav({ collapsed, mobile = false, onCollapse, onNavigate, openGroup, setOpenGroup, userRole }) {
   const location = useLocation();
   const visibleGroups = useMemo(() => getVisibleNavGroups(userRole), [userRole]);
   const [openParent, setOpenParent] = useState(() => activeParentFor(location.pathname, visibleGroups));
   const brandTarget = userRole === 'SUPER_ADMIN' ? '/admin' : '/dashboard';
+  const taskCount = useMyTaskCount();
 
   useEffect(() => {
     setOpenParent(activeParentFor(location.pathname, visibleGroups));
@@ -123,6 +149,11 @@ export function SidebarNav({ collapsed, mobile = false, onCollapse, onNavigate, 
                           <item.icon size={18} />
                         </span>
                         <span className="sidebar-nav-item-label">{item.label}</span>
+                        {item.to === '/my-tasks' && taskCount > 0 && !collapsed && (
+                          <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-warelyn-primary px-1.5 text-[10px] font-bold text-white">
+                            {taskCount > 99 ? '99+' : taskCount}
+                          </span>
+                        )}
                         {!collapsed && matchesPath(item.to, location.pathname, item.exact) ? <span className="sidebar-nav-item-dot" /> : null}
                       </NavLink>
                     );

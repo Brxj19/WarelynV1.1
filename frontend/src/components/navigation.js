@@ -6,6 +6,7 @@ import {
   Building2,
   CalendarClock,
   ClipboardCheck,
+  ClipboardList,
   CornerUpLeft,
   Database,
   DollarSign,
@@ -15,6 +16,7 @@ import {
   Handshake,
   Hash,
   HeartPulse,
+  Inbox,
   Layers2,
   LayoutDashboard,
   LogIn,
@@ -56,11 +58,16 @@ export const reportRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER'];
 
 export const superAdminRoles = ['SUPER_ADMIN'];
 
+export const taskRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF'];
+
 export const navGroups = [
   {
     label: 'Overview',
     roles: ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'SALES_STAFF', 'VIEWER'],
-    items: [{ icon: LayoutDashboard, label: 'Dashboard', section: 'Overview', to: '/dashboard' }],
+    items: [
+      { icon: LayoutDashboard, label: 'Dashboard', section: 'Overview', to: '/dashboard' },
+      { icon: Inbox, label: 'My Tasks', section: 'Overview', to: '/my-tasks', roles: taskRoles },
+    ],
   },
   {
     label: 'Platform',

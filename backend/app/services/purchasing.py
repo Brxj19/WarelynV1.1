@@ -9,7 +9,9 @@ from app.core.exceptions import AppError
 from app.models.inventory import ReferenceType
 from app.models.purchasing import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, PurchaseReceipt, PurchaseReceiptStatus
 from app.repositories.purchasing import PurchasingRepository
+from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.workflow import WorkflowService
 
 RECEIVABLE_STATUSES = {PurchaseOrderStatus.SUBMITTED, PurchaseOrderStatus.PARTIALLY_RECEIVED}
 
@@ -57,7 +59,27 @@ class PurchasingService:
             raise AppError("PURCHASE_ORDER_ITEMS_REQUIRED", "Purchase order must include at least one item before submit.", 400)
         po.status = PurchaseOrderStatus.SUBMITTED
         po.submitted_at = datetime.now(UTC)
-        return self._commit_and_get_po(tenant_id, po.id)
+        result = self._commit_and_get_po(tenant_id, po.id)
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "PURCHASE_ORDER_SUBMITTED", "purchase_order", po.id, None, {"po_number": po.po_number})
+            total_value = sum((item.unit_cost or Decimal("0")) * item.ordered_quantity for item in result.items)
+            if total_value > Decimal("10000"):
+                workflow.create_task(tenant_id, WorkflowTaskCreate(
+                    workflow_type="PURCHASING",
+                    entity_type="purchase_order",
+                    entity_id=po.id,
+                    step_key="APPROVE_PO",
+                    title=f"Approve high-value PO {po.po_number}",
+                    description=f"Purchase order total {total_value} exceeds approval threshold.",
+                    assigned_role="TENANT_ADMIN",
+                    priority="HIGH",
+                    action_url=f"/purchase-orders/{po.id}",
+                ))
+            self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def cancel_purchase_order(self, tenant_id: int, po_id: int) -> PurchaseOrder:
         po = self.get_purchase_order(tenant_id, po_id)
@@ -174,6 +196,23 @@ class PurchasingService:
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("PURCHASE_RECEIPT_COMMIT_FAILED", "Purchase receipt commit failed because of duplicate or invalid data.", 409) from exc
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "RECEIPT_COMMITTED", "purchase_receipt", receipt.id, actor_id, {"po_number": po.po_number, "receipt_number": receipt.receipt_number})
+            workflow.create_task(tenant_id, WorkflowTaskCreate(
+                workflow_type="PURCHASING",
+                entity_type="purchase_receipt",
+                entity_id=receipt.id,
+                step_key="PUTAWAY_STOCK",
+                title=f"Putaway received stock for PO {po.po_number}",
+                description="Receipt committed. Move stock to designated storage locations.",
+                assigned_role="INVENTORY_MANAGER",
+                priority="NORMAL",
+                action_url=f"/purchase-receipts/{receipt.id}",
+            ), created_by=actor_id)
+            self.db.commit()
+        except Exception:
+            pass
         return {"purchase_order": self.get_purchase_order(tenant_id, po.id), "receipt": self.get_receipt(tenant_id, receipt.id), "stock_results": stock_results}
 
     def _replace_order_items(self, tenant_id: int, po_id: int, items: list[dict[str, Any]]) -> None:

@@ -10,7 +10,9 @@ from app.models.inventory import InventorySerialStatus, ReferenceType
 from app.models.returns import SalesReturn, SalesReturnItem, SalesReturnItemStatus, SalesReturnStatus
 from app.models.sales import SalesOrderStatus
 from app.repositories.returns import ReturnsRepository
+from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.workflow import WorkflowService
 
 ZERO = Decimal("0")
 
@@ -74,6 +76,23 @@ class ReturnsService:
         sales_return.status = SalesReturnStatus.SUBMITTED
         sales_return.submitted_at = datetime.now(UTC)
         self.db.commit()
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "RETURN_SUBMITTED", "sales_return", return_id, None, {"return_number": sales_return.return_number if hasattr(sales_return, 'return_number') else str(return_id)})
+            workflow.create_task(tenant_id, WorkflowTaskCreate(
+                workflow_type="RETURNS",
+                entity_type="sales_return",
+                entity_id=return_id,
+                step_key="RETURN_QC",
+                title=f"Inspect returned items for return #{return_id}",
+                description="Return submitted. Inspect items and record QC results.",
+                assigned_role="INVENTORY_MANAGER",
+                priority="NORMAL",
+                action_url=f"/returns/{return_id}",
+            ))
+            self.db.commit()
+        except Exception:
+            pass
         return self.get_return(tenant_id, return_id)
 
     def cancel_return(self, tenant_id: int, return_id: int) -> SalesReturn:

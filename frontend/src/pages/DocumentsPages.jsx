@@ -94,11 +94,12 @@ export function InvoicesPage() {
 
 export function InvoiceDetailPage() {
   const { id } = useParams();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [invoice, setInvoice] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
+  const mayWrite = user?.role !== 'VIEWER';
 
   async function load() {
     setIsLoading(true);
@@ -142,17 +143,23 @@ export function InvoiceDetailPage() {
               <Download size={16} />
               PDF
             </Button>
-            <Button disabled={isBusy || invoice.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendInvoice(accessToken, id))}>
-              <Mail size={16} />
-              Send
-            </Button>
-            <Button disabled={isBusy || invoice.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markInvoicePaid(accessToken, id))}>
-              <Stamp size={16} />
-              Mark paid
-            </Button>
-            <Button disabled={isBusy || invoice.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidInvoice(accessToken, id))}>
-              Void
-            </Button>
+            {mayWrite && (
+              <Button disabled={isBusy || invoice.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendInvoice(accessToken, id))}>
+                <Mail size={16} />
+                Send
+              </Button>
+            )}
+            {mayWrite && (
+              <Button disabled={isBusy || invoice.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markInvoicePaid(accessToken, id))}>
+                <Stamp size={16} />
+                Mark paid
+              </Button>
+            )}
+            {mayWrite && (
+              <Button disabled={isBusy || invoice.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidInvoice(accessToken, id))}>
+                Void
+              </Button>
+            )}
           </div>
         }
         backTo="/invoices"
@@ -266,8 +273,9 @@ export function BillsPage() {
 
 export function BillDetailPage() {
   const { id } = useParams();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [bill, setBill] = useState(null);
+  const mayWrite = user?.role !== 'VIEWER';
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
@@ -314,17 +322,23 @@ export function BillDetailPage() {
               <Download size={16} />
               PDF
             </Button>
-            <Button disabled={isBusy || bill.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendBill(accessToken, id))}>
-              <Mail size={16} />
-              Send
-            </Button>
-            <Button disabled={isBusy || bill.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markBillPaid(accessToken, id))}>
-              <Receipt size={16} />
-              Mark paid
-            </Button>
-            <Button disabled={isBusy || bill.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidBill(accessToken, id))}>
-              Void
-            </Button>
+            {mayWrite && (
+              <Button disabled={isBusy || bill.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendBill(accessToken, id))}>
+                <Mail size={16} />
+                Send
+              </Button>
+            )}
+            {mayWrite && (
+              <Button disabled={isBusy || bill.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markBillPaid(accessToken, id))}>
+                <Receipt size={16} />
+                Mark paid
+              </Button>
+            )}
+            {mayWrite && (
+              <Button disabled={isBusy || bill.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidBill(accessToken, id))}>
+                Void
+              </Button>
+            )}
           </div>
         }
         backTo="/bills"

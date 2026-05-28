@@ -20,6 +20,7 @@ import * as purchasingService from '../services/purchasingService.js';
 import * as reportsService from '../services/reportsService.js';
 import * as returnsService from '../services/returnsService.js';
 import * as salesService from '../services/salesService.js';
+import * as workflowService from '../services/workflowService.js';
 
 const kpiCards = [
   ['total_products', 'Total products', 'Catalog scope', 'primary', Boxes, '/catalog/products', null],
@@ -45,6 +46,7 @@ export function DashboardPage() {
   const [salesOrders, setSalesOrders] = useState([]);
   const [pickTasks, setPickTasks] = useState([]);
   const [salesReturns, setSalesReturns] = useState([]);
+  const [workflowTasks, setWorkflowTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -53,18 +55,20 @@ export function DashboardPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [dashboardData, purchaseRows, salesRows, pickRows, returnRows] = await Promise.all([
+        const [dashboardData, purchaseRows, salesRows, pickRows, returnRows, taskRows] = await Promise.all([
           reportsService.getOperationalDashboard(accessToken, { compare_previous: true }),
           purchasingService.listPurchaseOrders(accessToken),
           salesService.listSalesOrders(accessToken),
           fulfillmentService.listPickTasks(accessToken),
           returnsService.listSalesReturns(accessToken),
+          ['VIEWER'].includes(user?.role) ? Promise.resolve([]) : workflowService.getMyTasks(accessToken, 'OPEN').catch(() => []),
         ]);
         setDashboard(dashboardData);
         setPurchaseOrders(purchaseRows);
         setSalesOrders(salesRows);
         setPickTasks(pickRows);
         setSalesReturns(returnRows);
+        setWorkflowTasks(taskRows);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -147,6 +151,42 @@ export function DashboardPage() {
           );
         })}
       </div>
+
+      {/* Pending Tasks Widget */}
+      {user?.role !== 'VIEWER' && workflowTasks.length > 0 && (
+        <Card>
+          <CardHeader className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-warelyn-text">Pending Tasks</h2>
+            <Link className="text-sm font-semibold text-warelyn-primary" to="/my-tasks">View all &rarr;</Link>
+          </CardHeader>
+          <CardBody>
+            {user?.role === 'TENANT_ADMIN' ? (
+              <div className="flex flex-wrap gap-3">
+                {Object.entries(workflowTasks.reduce((acc, t) => { acc[t.assigned_role] = (acc[t.assigned_role] || 0) + 1; return acc; }, {})).map(([role, count]) => (
+                  <Link className="flex items-center gap-2 rounded-lg border border-warelyn-border bg-gray-50 px-3 py-2 text-sm transition-colors hover:bg-gray-100" key={role} to="/my-tasks">
+                    <span className="font-bold text-warelyn-primary">{count}</span>
+                    <span className="text-warelyn-muted">for {role.replace(/_/g, ' ')}</span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="divide-y divide-warelyn-border overflow-hidden rounded-xl border border-warelyn-border">
+                {workflowTasks.slice(0, 5).map((task) => (
+                  <Link className="flex items-center justify-between gap-3 p-3 transition-colors hover:bg-gray-50" key={task.id} to={task.action_url || '/my-tasks'}>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-warelyn-text">{task.title}</p>
+                      <p className="text-xs text-warelyn-muted">{task.entity_type.replace(/_/g, ' ')} #{task.entity_id}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${task.priority === 'HIGH' || task.priority === 'URGENT' ? 'border-red-200 bg-red-50 text-red-600' : 'border-blue-200 bg-blue-50 text-blue-600'}`}>
+                      {task.priority}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+      )}
 
       {/* Insights */}
       {dashboard?.insights?.length > 0 && (

@@ -29,6 +29,7 @@ from app.repositories.settings import UserPreferencesRepository
 from app.services.default_templates import DEFAULT_TEMPLATES
 from app.services.email_service import send_email
 from app.services.pdf_service import render_html_to_pdf
+from app.services.workflow import WorkflowService
 from app.utils.currency import get_currency_info
 
 from dataclasses import dataclass
@@ -538,7 +539,15 @@ class DocumentsService:
         )
         for item in line_items:
             self.db.add(BillItem(bill_id=bill.id, **item))
-        return self._commit_and_refresh_bill(tenant_id, bill.id, "BILL_CREATED", actor_user_id)
+        result = self._commit_and_refresh_bill(tenant_id, bill.id, "BILL_CREATED", actor_user_id)
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "BILL_RECORDED", "bill", bill.id, actor_user_id, {"bill_number": bill.bill_number, "purchase_order_id": po.id})
+            workflow.cancel_entity_tasks(tenant_id, "purchase_order", po.id)
+            self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def send_invoice(self, tenant_id: int, invoice_id: int, actor_user_id: int, email: str | None = None) -> Invoice:
         invoice = self.get_invoice(tenant_id, invoice_id)
@@ -561,7 +570,16 @@ class DocumentsService:
         )
         invoice.status = InvoiceStatus.SENT
         invoice.sent_at = _naive_utcnow()
-        return self._commit_and_refresh_invoice(tenant_id, invoice.id, "INVOICE_SENT", actor_user_id)
+        result = self._commit_and_refresh_invoice(tenant_id, invoice.id, "INVOICE_SENT", actor_user_id)
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "INVOICE_SENT", "invoice", invoice.id, actor_user_id, {"invoice_number": invoice.invoice_number, "sales_order_id": invoice.sales_order_id})
+            if invoice.sales_order_id:
+                workflow.cancel_entity_tasks(tenant_id, "sales_order", invoice.sales_order_id)
+            self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def send_bill(self, tenant_id: int, bill_id: int, actor_user_id: int, email: str | None = None) -> Bill:
         bill = self.get_bill(tenant_id, bill_id)
