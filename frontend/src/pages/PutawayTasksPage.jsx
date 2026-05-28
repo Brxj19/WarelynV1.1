@@ -1,6 +1,6 @@
-import { ArrowRight, CheckCircle2, Package, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Plus, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
@@ -20,6 +20,10 @@ function listPutawayTasks(accessToken, status) {
   return apiRequest(`/putaway-tasks${params}`, { accessToken });
 }
 
+function createPutawayTask(accessToken, body) {
+  return apiRequest('/putaway-tasks', { accessToken, method: 'POST', body: JSON.stringify(body) });
+}
+
 function getPutawayTask(accessToken, id) {
   return apiRequest(`/putaway-tasks/${id}`, { accessToken });
 }
@@ -36,19 +40,88 @@ function cancelPutawayTask(accessToken, id) {
   return apiRequest(`/putaway-tasks/${id}/cancel`, { accessToken, method: 'POST', body: JSON.stringify({}) });
 }
 
+function listWarehouses(accessToken) {
+  return apiRequest('/warehouses', { accessToken });
+}
+
+function listLocations(accessToken, warehouseId) {
+  return apiRequest(`/warehouses/${warehouseId}/locations`, { accessToken });
+}
+
+function listProducts(accessToken) {
+  return apiRequest('/catalog/products', { accessToken });
+}
+
 export function PutawayTasksPage() {
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [warehouses, setWarehouses] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [form, setForm] = useState({ product_id: '', warehouse_id: '', from_location_id: '', to_location_id: '', quantity: '', receipt_id: '' });
+  const [formError, setFormError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function loadTasks() {
+    setIsLoading(true);
+    try {
+      setTasks(await listPutawayTasks(accessToken));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => { loadTasks(); }, [accessToken]);
 
   useEffect(() => {
-    listPutawayTasks(accessToken)
-      .then(setTasks)
-      .catch((e) => setError(e.message))
-      .finally(() => setIsLoading(false));
-  }, [accessToken]);
+    if (showForm) {
+      listWarehouses(accessToken).then(setWarehouses).catch(() => {});
+      listProducts(accessToken).then(setProducts).catch(() => {});
+    }
+  }, [showForm, accessToken]);
+
+  useEffect(() => {
+    if (form.warehouse_id) {
+      listLocations(accessToken, form.warehouse_id).then(setLocations).catch(() => setLocations([]));
+    } else {
+      setLocations([]);
+    }
+  }, [form.warehouse_id, accessToken]);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    setFormError('');
+    if (!form.product_id || !form.warehouse_id || !form.from_location_id || !form.quantity) {
+      setFormError('Product, warehouse, from location, and quantity are required.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const body = {
+        product_id: Number(form.product_id),
+        warehouse_id: Number(form.warehouse_id),
+        from_location_id: Number(form.from_location_id),
+        to_location_id: form.to_location_id ? Number(form.to_location_id) : null,
+        quantity: form.quantity,
+      };
+      if (form.receipt_id) body.receipt_id = Number(form.receipt_id);
+      await createPutawayTask(accessToken, body);
+      setShowForm(false);
+      setForm({ product_id: '', warehouse_id: '', from_location_id: '', to_location_id: '', quantity: '', receipt_id: '' });
+      await loadTasks();
+    } catch (e) {
+      setFormError(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   const rows = search
     ? tasks.filter((t) => `${t.id} ${t.status} ${t.product_id}`.toLowerCase().includes(search.toLowerCase()))
@@ -56,10 +129,112 @@ export function PutawayTasksPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader kicker="Warehousing" title="Putaway Tasks" description="Move received stock from receiving docks to storage locations." />
+      <PageHeader
+        kicker="Warehousing"
+        title="Putaway Tasks"
+        description="Move received stock from receiving docks to storage locations."
+        actions={
+          <Button variant="primary" onClick={() => setShowForm(!showForm)}>
+            <Plus size={16} /> Create Putaway Task
+          </Button>
+        }
+      />
+
+      {showForm && (
+        <Card>
+          <CardHeader title="Create Putaway Task" />
+          <CardBody>
+            {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
+            <form className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={handleCreate}>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">Product</label>
+                <select
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  value={form.product_id}
+                  onChange={(e) => setForm({ ...form, product_id: e.target.value })}
+                >
+                  <option value="">Select product...</option>
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">Warehouse</label>
+                <select
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  value={form.warehouse_id}
+                  onChange={(e) => setForm({ ...form, warehouse_id: e.target.value, from_location_id: '', to_location_id: '' })}
+                >
+                  <option value="">Select warehouse...</option>
+                  {warehouses.map((w) => (
+                    <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">From Location</label>
+                <select
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  value={form.from_location_id}
+                  onChange={(e) => setForm({ ...form, from_location_id: e.target.value })}
+                  disabled={!form.warehouse_id}
+                >
+                  <option value="">Select from location...</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name} ({l.code}) — {l.location_type}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">To Location</label>
+                <select
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  value={form.to_location_id}
+                  onChange={(e) => setForm({ ...form, to_location_id: e.target.value })}
+                  disabled={!form.warehouse_id}
+                >
+                  <option value="">Select to location...</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name} ({l.code}) — {l.location_type}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">Quantity</label>
+                <input
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  min="1"
+                  placeholder="e.g. 2000"
+                  type="number"
+                  value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-warelyn-muted">Receipt ID (optional)</label>
+                <input
+                  className="w-full rounded-lg border border-warelyn-border px-3 py-2 text-sm"
+                  placeholder="e.g. 1"
+                  type="number"
+                  value={form.receipt_id}
+                  onChange={(e) => setForm({ ...form, receipt_id: e.target.value })}
+                />
+              </div>
+              <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+                <Button disabled={isSubmitting} type="submit" variant="primary">
+                  {isSubmitting ? 'Creating...' : 'Create Task'}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+      )}
+
       <TableShell
         description={`${rows.length} putaway task(s)`}
-        emptyDescription={search ? 'No tasks match your filter.' : 'No putaway tasks created yet.'}
+        emptyDescription={search ? 'No tasks match your filter.' : 'No putaway tasks created yet. Click "Create Putaway Task" to get started.'}
         emptyIllustration={search ? emptyStateIllustrations.noResult : emptyStateIllustrations.warehouse}
         emptySecondaryActionLabel={search ? 'Clear filters' : undefined}
         emptyTitle={search ? 'No matching tasks' : 'No putaway tasks'}
@@ -89,7 +264,7 @@ export function PutawayTasksPage() {
             {rows.map((task) => (
               <tr key={task.id}>
                 <td className="font-semibold text-warelyn-primary">
-                  <a href={`/putaway-tasks/${task.id}`}>#{task.id}</a>
+                  <Link to={`/putaway-tasks/${task.id}`}>#{task.id}</Link>
                 </td>
                 <td><StatusBadge status={task.status}>{task.status}</StatusBadge></td>
                 <td>#{task.product_id}</td>
@@ -99,9 +274,9 @@ export function PutawayTasksPage() {
                 <td className="number-cell">{task.quantity}</td>
                 <td>{formatDate(task.created_at)}</td>
                 <td>
-                  <a href={`/putaway-tasks/${task.id}`}>
+                  <Link to={`/putaway-tasks/${task.id}`}>
                     <Button size="sm" variant="secondary">View</Button>
-                  </a>
+                  </Link>
                 </td>
               </tr>
             ))}
