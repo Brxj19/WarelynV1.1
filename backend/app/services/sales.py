@@ -256,7 +256,7 @@ class SalesService:
                 description="Fulfillment committed. Create invoice and send to customer.",
                 assigned_role="SALES_STAFF",
                 priority="NORMAL",
-                action_url=f"/invoices/new?sales_order_id={order.id}",
+                action_url=f"/invoices",
             ), created_by=actor_id)
             self.db.commit()
         except Exception:

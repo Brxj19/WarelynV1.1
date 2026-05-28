@@ -104,7 +104,7 @@ class PutawayTaskService:
                         description="Putaway complete. Record vendor bill for this purchase order.",
                         assigned_role="PURCHASE_STAFF",
                         priority="NORMAL",
-                        action_url=f"/bills/new?purchase_order_id={receipt.purchase_order_id}",
+                        action_url=f"/bills",
                     ))
             self.db.commit()
         except Exception:

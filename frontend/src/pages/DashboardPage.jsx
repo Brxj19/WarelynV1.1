@@ -55,13 +55,20 @@ export function DashboardPage() {
       setIsLoading(true);
       setError('');
       try {
+        const role = user?.role;
+        const reportRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER'];
+        const purchaseRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'VIEWER'];
+        const salesRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER'];
+        const opsRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF'];
+        const taskRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF'];
+
         const [dashboardData, purchaseRows, salesRows, pickRows, returnRows, taskRows] = await Promise.all([
-          reportsService.getOperationalDashboard(accessToken, { compare_previous: true }),
-          purchasingService.listPurchaseOrders(accessToken),
-          salesService.listSalesOrders(accessToken),
-          fulfillmentService.listPickTasks(accessToken),
-          returnsService.listSalesReturns(accessToken),
-          ['VIEWER'].includes(user?.role) ? Promise.resolve([]) : workflowService.getMyTasks(accessToken, 'OPEN').catch(() => []),
+          reportRoles.includes(role) ? reportsService.getOperationalDashboard(accessToken, { compare_previous: true }) : Promise.resolve(null),
+          purchaseRoles.includes(role) ? purchasingService.listPurchaseOrders(accessToken) : Promise.resolve([]),
+          salesRoles.includes(role) ? salesService.listSalesOrders(accessToken) : Promise.resolve([]),
+          opsRoles.includes(role) ? fulfillmentService.listPickTasks(accessToken) : Promise.resolve([]),
+          salesRoles.includes(role) ? returnsService.listSalesReturns(accessToken) : Promise.resolve([]),
+          taskRoles.includes(role) ? workflowService.getMyTasks(accessToken, 'OPEN').catch(() => []) : Promise.resolve([]),
         ]);
         setDashboard(dashboardData);
         setPurchaseOrders(purchaseRows);

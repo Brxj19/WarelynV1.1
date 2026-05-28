@@ -74,7 +74,7 @@ class PurchasingService:
                     description=f"Purchase order total {total_value} exceeds approval threshold.",
                     assigned_role="TENANT_ADMIN",
                     priority="HIGH",
-                    action_url=f"/purchase-orders/{po.id}",
+                    action_url=f"/purchases/{po.id}",
                 ))
             self.db.commit()
         except Exception:

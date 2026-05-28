@@ -20,7 +20,7 @@ def list_currencies(context: UserContext = Depends(require_roles(*read_roles))) 
 
 
 @router.get("/tenant", response_model=TenantSettingsRead)
-def get_tenant_settings(context: UserContext = Depends(require_roles(*tenant_admin_roles)), db: Session = Depends(get_db)) -> TenantSettingsRead:
+def get_tenant_settings(context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> TenantSettingsRead:
     return TenantSettingsService(db).get_settings(context.tenant_id)
 
 
