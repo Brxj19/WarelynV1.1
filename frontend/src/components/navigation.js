@@ -112,6 +112,7 @@ export const navGroups = [
           { icon: PlusSquare, label: 'Create Warehouse', section: 'Warehousing', to: '/warehouses/new', roles: writeRoles, exact: true },
         ],
       },
+      { icon: LogIn, label: 'Putaway Tasks', section: 'Warehousing', to: '/putaway-tasks', roles: writeRoles, exact: true },
     ],
   },
   {

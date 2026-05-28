@@ -208,7 +208,7 @@ class PurchasingService:
                 description="Receipt committed. Move stock to designated storage locations.",
                 assigned_role="INVENTORY_MANAGER",
                 priority="NORMAL",
-                action_url=f"/purchase-receipts/{receipt.id}",
+                action_url=f"/putaway-tasks",
             ), created_by=actor_id)
             self.db.commit()
         except Exception:
