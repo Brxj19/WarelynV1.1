@@ -28,6 +28,7 @@ class WorkflowService:
                 actor_user_id=user_id,
                 payload={"task_id": task.id, "step_key": task.step_key},
             )
+            self.db.commit()
         return task
 
     def cancel_entity_tasks(self, tenant_id: int, entity_type: str, entity_id: int) -> None:
