@@ -40,7 +40,7 @@ def start_putaway_task(task_id: int, context: UserContext = Depends(require_role
 @router.post("/{task_id}/complete", response_model=PutawayTaskRead)
 def complete_putaway_task(task_id: int, body: PutawayTaskUpdate | None = None, context: UserContext = Depends(require_roles(*roles)), db: Session = Depends(get_db)):
     to_loc = body.to_location_id if body else None
-    return PutawayTaskService(db).complete(context.tenant_id, task_id, to_loc)
+    return PutawayTaskService(db).complete(context.tenant_id, context.user.id, task_id, to_loc)
 
 
 @router.post("/{task_id}/cancel", response_model=PutawayTaskRead)

@@ -68,6 +68,11 @@ def list_sales_fulfillments(order_id: int, context: UserContext = Depends(requir
     return SalesService(db).list_fulfillments_for_order(context.tenant_id, order_id)
 
 
+@router.get("/sales-fulfillments", response_model=list[SalesFulfillmentRead])
+def list_all_fulfillments(context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> list[SalesFulfillmentRead]:
+    return SalesService(db).list_all_fulfillments(context.tenant_id)
+
+
 @router.get("/sales-fulfillments/{fulfillment_id}", response_model=SalesFulfillmentRead)
 def get_sales_fulfillment(fulfillment_id: int, context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> SalesFulfillmentRead:
     return SalesService(db).get_fulfillment(context.tenant_id, fulfillment_id)

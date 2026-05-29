@@ -12,6 +12,7 @@ import { StockImpactPreview } from '../components/ui/StockImpactPreview.jsx';
 import { formatDecimal } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as catalogService from '../services/catalogService.js';
+import * as inventoryService from '../services/inventoryService.js';
 import * as salesService from '../services/salesService.js';
 import * as warehouseService from '../services/warehouseService.js';
 
@@ -25,6 +26,7 @@ export function SalesFulfillPage() {
   const [productsById, setProductsById] = useState({});
   const [warehouses, setWarehouses] = useState([]);
   const [locationsByWarehouse, setLocationsByWarehouse] = useState({});
+  const [reservations, setReservations] = useState([]);
   const [fulfillmentNumber, setFulfillmentNumber] = useState(`FUL-${Date.now()}`);
   const [lines, setLines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,35 +38,39 @@ export function SalesFulfillPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [orderRow, warehouseRows, productRows] = await Promise.all([
+        const [orderRow, warehouseRows, productRows, reservationRows] = await Promise.all([
           salesService.getSalesOrder(accessToken, id),
           warehouseService.listWarehouses(accessToken),
           catalogService.listProducts(accessToken),
+          inventoryService.listReservations(accessToken),
         ]);
         const locationPairs = await Promise.all(
           warehouseRows.map(async (warehouse) => [warehouse.id, await warehouseService.listWarehouseLocations(accessToken, warehouse.id)]),
         );
         const locationMap = Object.fromEntries(locationPairs);
-        const defaultWarehouse = warehouseRows[0]?.id ? String(warehouseRows[0].id) : '';
-        const defaultLocation =
-          defaultWarehouse && locationMap[defaultWarehouse]?.[0]?.id
-            ? String(locationMap[defaultWarehouse][0].id)
-            : '';
+        const orderReservations = reservationRows.filter(
+          (reservation) =>
+            reservation.reference_type === 'SALES_ORDER'
+            && reservation.reference_id === orderRow.order_number
+            && reservation.status === 'ACTIVE',
+        );
+        const orderItemByProductId = Object.fromEntries(orderRow.items.map((item) => [item.product_id, item]));
         setOrder(orderRow);
         setProductsById(Object.fromEntries(productRows.map((product) => [product.id, product])));
         setWarehouses(warehouseRows);
         setLocationsByWarehouse(locationMap);
+        setReservations(orderReservations);
         setLines(
-          orderRow.items
-            .filter((item) => Number(item.reserved_quantity) > Number(item.fulfilled_quantity))
-            .map((item) => ({
-              sales_order_item_id: item.id,
-              product_id: item.product_id,
-              warehouse_id: defaultWarehouse,
-              location_id: defaultLocation,
-              reservation_id: '',
-              fulfilled_quantity: (Number(item.reserved_quantity) - Number(item.fulfilled_quantity)).toFixed(3),
-            })),
+          orderReservations
+            .map((reservation) => ({
+              sales_order_item_id: orderItemByProductId[reservation.product_id]?.id ?? null,
+              product_id: reservation.product_id,
+              warehouse_id: String(reservation.warehouse_id),
+              location_id: String(reservation.location_id),
+              reservation_id: String(reservation.id),
+              fulfilled_quantity: reservation.quantity,
+            }))
+            .filter((line) => line.sales_order_item_id != null),
         );
       } catch (loadError) {
         setError(loadError.message);
@@ -79,6 +85,18 @@ export function SalesFulfillPage() {
     setLines((current) =>
       current.map((line, lineIndex) => {
         if (lineIndex !== index) return line;
+        if (key === 'reservation_id') {
+          const selectedReservation = reservations.find((reservation) => String(reservation.id) === String(value));
+          if (selectedReservation) {
+            return {
+              ...line,
+              reservation_id: value,
+              warehouse_id: String(selectedReservation.warehouse_id),
+              location_id: String(selectedReservation.location_id),
+              fulfilled_quantity: selectedReservation.quantity,
+            };
+          }
+        }
         if (key === 'warehouse_id') {
           const firstLocation = locationsByWarehouse[value]?.[0]?.id ?? '';
           return { ...line, warehouse_id: value, location_id: firstLocation ? String(firstLocation) : '' };
@@ -140,7 +158,7 @@ export function SalesFulfillPage() {
       <BackButton to="/sales" />
       <PageHeader
         backTo="/sales"
-        description="Create a fulfillment draft against active reservation IDs. Stock is only deducted later when the draft is committed."
+        description="Create a fulfillment draft against active reservations. Stock is only deducted later when the draft is committed."
         kicker="Fulfillment"
         title={`Fulfill ${order.order_number}`}
       />
@@ -154,7 +172,7 @@ export function SalesFulfillPage() {
             <div className="workflow-helper-panel">
               <h3>Commit warning</h3>
               <p>
-                This screen only creates the draft. The actual stock deduction happens later when the fulfillment is committed, so reservation IDs must stay accurate.
+                This screen only creates the draft. The actual stock deduction happens later when the fulfillment is committed, so each line must stay aligned with an active reservation.
               </p>
             </div>
             <Input label="Fulfillment number" required value={fulfillmentNumber} onChange={(event) => setFulfillmentNumber(event.target.value)} />
@@ -166,16 +184,43 @@ export function SalesFulfillPage() {
             <h2 className="text-lg font-semibold text-warelyn-text">Fulfillment lines</h2>
           </CardHeader>
           <CardBody className="space-y-4">
+            {lines.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-warelyn-border bg-slate-50 px-4 py-5 text-sm text-warelyn-muted">
+                No active reservations were found for this order. Confirm the order with valid allocations before creating a fulfillment draft.
+              </p>
+            ) : null}
             {lines.map((line, index) => {
               const product = productsById[line.product_id];
+              const reservationOptions = reservations.filter((reservation) => reservation.product_id === line.product_id);
               return (
-                <div className="grid gap-3 rounded-xl border border-warelyn-border p-4 lg:grid-cols-[minmax(0,1.2fr)_180px_160px_1fr_1fr]" key={line.sales_order_item_id}>
+                <div className="grid gap-3 rounded-xl border border-warelyn-border p-4 lg:grid-cols-[minmax(0,1.2fr)_180px_160px_1fr_1fr]" key={line.reservation_id || line.sales_order_item_id}>
                   <div>
                     <span className="text-xs font-semibold uppercase tracking-wide text-warelyn-muted">Product</span>
                     <p className="mt-2 font-semibold text-warelyn-text">{product?.name ?? `Product #${line.product_id}`}</p>
                     <p className="mt-1 text-xs text-warelyn-muted">SKU {product?.sku ?? '-'}</p>
                   </div>
-                  <Input label="Reservation ID" required value={line.reservation_id} onChange={(event) => updateLine(index, 'reservation_id', event.target.value)} />
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-warelyn-text">Reservation</span>
+                    <select
+                      className={selectClass}
+                      required
+                      value={line.reservation_id}
+                      onChange={(event) => updateLine(index, 'reservation_id', event.target.value)}
+                    >
+                      <option value="">Select reservation</option>
+                      {reservationOptions.map((reservation) => {
+                        const warehouseName = warehouses.find((warehouse) => warehouse.id === reservation.warehouse_id)?.name ?? `Warehouse #${reservation.warehouse_id}`;
+                        const locationName = (locationsByWarehouse[String(reservation.warehouse_id)] ?? []).find(
+                          (location) => location.id === reservation.location_id,
+                        )?.name ?? `Location #${reservation.location_id}`;
+                        return (
+                          <option key={reservation.id} value={reservation.id}>
+                            {`Res #${reservation.id} — ${formatDecimal(reservation.quantity)} units @ ${warehouseName} / ${locationName}`}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
                   <Input
                     label="Fulfill qty"
                     min="0.001"
@@ -234,7 +279,7 @@ export function SalesFulfillPage() {
             <Button onClick={() => navigate('/sales')} type="button" variant="ghost">
               Cancel
             </Button>
-            <Button disabled={isSaving} type="submit">
+            <Button disabled={isSaving || lines.length === 0} type="submit">
               {isSaving ? 'Creating...' : 'Create fulfillment draft'}
             </Button>
           </div>

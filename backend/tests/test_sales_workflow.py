@@ -1,8 +1,13 @@
+from types import SimpleNamespace
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.auth import Tenant, UserRole
+from app.models.fulfillment import Package, PackageStatus
+from app.models.sales import SalesFulfillment, SalesFulfillmentStatus
 from app.models.workflow import WorkflowTask
+from app.services.fulfillment import FulfillmentService
 
 
 def register_and_login(client: TestClient, email: str = "admin@example.com") -> dict[str, object]:
@@ -50,6 +55,19 @@ def create_and_confirm_order(client: TestClient, token: str, dimension: dict[str
     }, headers=auth_headers(token))
     assert confirm_resp.status_code == 200
     return confirm_resp.json()["sales_order"]
+
+
+def pick_auto_task(client: TestClient, token: str, order_id: int) -> dict[str, object]:
+    task_resp = client.get(f"/api/sales-orders/{order_id}/pick-tasks", headers=auth_headers(token))
+    assert task_resp.status_code == 200
+    task = task_resp.json()[0]
+    pick_resp = client.post(
+        f"/api/pick-tasks/{task['id']}/pick",
+        json={"items": [{"pick_task_item_id": item["id"], "picked_quantity": item["required_quantity"]} for item in task["items"]]},
+        headers=auth_headers(token),
+    )
+    assert pick_resp.status_code == 200
+    return pick_resp.json()
 
 
 def test_confirm_creates_pick_task(client: TestClient, db_session: Session):
@@ -163,3 +181,49 @@ def test_commit_fulfillment_creates_invoice_task(client: TestClient, db_session:
     ).all()
     assert len(tasks) == 1
     assert tasks[0].assigned_role == "SALES_STAFF"
+
+
+def test_pick_completion_creates_packed_package_and_committed_fulfillment(client: TestClient, db_session: Session):
+    login = register_and_login(client, "workflow-pick@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token)
+    stock_in(client, token, dimension)
+    order = create_and_confirm_order(client, token, dimension)
+
+    picked = pick_auto_task(client, token, order["id"])
+    assert picked["status"] == "PICKED"
+
+    package = db_session.query(Package).filter(Package.sales_order_id == order["id"]).one()
+    fulfillment = db_session.query(SalesFulfillment).filter(SalesFulfillment.sales_order_id == order["id"]).one()
+    assert package.status == PackageStatus.PACKED
+    assert fulfillment.status == SalesFulfillmentStatus.COMMITTED
+
+
+def test_auto_pack_and_fulfill_skips_when_pick_task_has_no_creator(db_session: Session):
+    FulfillmentService(db_session)._auto_pack_and_fulfill(tenant_id=1, order_id=999, pick_task=SimpleNamespace(created_by=None, items=[]))
+
+
+def test_list_all_packages_endpoint_returns_tenant_packages(client: TestClient):
+    login = register_and_login(client, "workflow-packages@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token)
+    stock_in(client, token, dimension)
+    order = create_and_confirm_order(client, token, dimension)
+    pick_auto_task(client, token, order["id"])
+
+    response = client.get("/api/packages", headers=auth_headers(token))
+    assert response.status_code == 200
+    assert any(package["sales_order_id"] == order["id"] for package in response.json())
+
+
+def test_list_all_sales_fulfillments_endpoint_returns_tenant_fulfillments(client: TestClient):
+    login = register_and_login(client, "workflow-fulfillments@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token)
+    stock_in(client, token, dimension)
+    order = create_and_confirm_order(client, token, dimension)
+    pick_auto_task(client, token, order["id"])
+
+    response = client.get("/api/sales-fulfillments", headers=auth_headers(token))
+    assert response.status_code == 200
+    assert any(fulfillment["sales_order_id"] == order["id"] for fulfillment in response.json())

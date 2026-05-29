@@ -145,7 +145,7 @@ export function AppRoutes() {
             <Route path="returns/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnFormPage /></RoleGuard>} />
             <Route path="returns/:id/edit" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnFormPage /></RoleGuard>} />
             <Route path="returns/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER']}><SalesReturnDetailPage /></RoleGuard>} />
-            <Route path="returns/:id/inspect" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnInspectPage /></RoleGuard>} />
+            <Route path="returns/:id/inspect" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><SalesReturnInspectPage /></RoleGuard>} />
             <Route path="pick-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><PickTasksPage /></RoleGuard>} />
             <Route path="pick-tasks/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><PickTaskDetailPage /></RoleGuard>} />
             <Route path="packages" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><LazyPackagesPage /></RoleGuard>} />

@@ -14,6 +14,18 @@ task_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER, UserRole.SALES_
 admin_roles = (UserRole.TENANT_ADMIN,)
 
 
+@router.get("/my-tasks/count", response_model=dict)
+def get_my_task_count(
+    status_filter: str | None = Query("OPEN", alias="status"),
+    context: UserContext = Depends(require_roles(*task_roles)),
+    db: Session = Depends(get_db),
+) -> dict:
+    tasks = WorkflowService(db).get_my_tasks(
+        context.tenant_id, context.user.id, context.user.role.value, status_filter
+    )
+    return {"count": len(tasks)}
+
+
 @router.get("/my-tasks", response_model=list[WorkflowTaskRead])
 def get_my_tasks(
     status_filter: str | None = Query(None, alias="status"),
@@ -37,6 +49,27 @@ def get_task(
     return task
 
 
+@router.post("/tasks/{task_id}/start", response_model=WorkflowTaskRead)
+def start_task(
+    task_id: int,
+    context: UserContext = Depends(require_roles(*task_roles)),
+    db: Session = Depends(get_db),
+) -> WorkflowTaskRead:
+    service = WorkflowService(db)
+    task = service.get_task(context.tenant_id, task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    is_admin = context.user.role == UserRole.TENANT_ADMIN
+    is_role_match = task.assigned_role == context.user.role.value
+    is_direct = task.assigned_to_user_id == context.user.id
+    if not (is_admin or is_role_match or is_direct):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to start this task")
+    if task.status != "OPEN":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Task is already {task.status}")
+    started = service.start_task(context.tenant_id, task_id, context.user.id)
+    return started
+
+
 @router.post("/tasks/{task_id}/complete", response_model=WorkflowTaskRead)
 def complete_task(
     task_id: int,
@@ -48,7 +81,10 @@ def complete_task(
     task = service.get_task(context.tenant_id, task_id)
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-    if context.user.role != UserRole.TENANT_ADMIN and task.assigned_role != context.user.role.value:
+    is_admin = context.user.role == UserRole.TENANT_ADMIN
+    is_role_match = task.assigned_role == context.user.role.value
+    is_direct = task.assigned_to_user_id == context.user.id
+    if not (is_admin or is_role_match or is_direct):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to complete this task")
     if task.status not in ("OPEN", "IN_PROGRESS"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Task is already {task.status}")

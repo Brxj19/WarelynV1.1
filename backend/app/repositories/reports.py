@@ -1,14 +1,17 @@
 from datetime import date, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
+from app.models.documents import Bill, Invoice
 from app.models.fulfillment import Package, PickTask
 from app.models.inventory import InventoryBatch, InventorySerial, StockLedgerEntry, WarehouseStock
-from app.models.master_data import Brand, Category, Product, RecordStatus, Warehouse, WarehouseLocation
+from app.models.master_data import Brand, Category, Customer, Product, RecordStatus, Vendor, Warehouse, WarehouseLocation
+from app.models.operations import StockCountSession
 from app.models.purchasing import PurchaseOrder, PurchaseReceipt
 from app.models.returns import BlockedReturnStock, SalesReturn
 from app.models.sales import SalesFulfillment, SalesOrder
+from app.models.workflow import WorkflowTask
 
 
 class ReportsRepository:
@@ -32,6 +35,12 @@ class ReportsRepository:
 
     def brands(self, tenant_id: int) -> list[Brand]:
         return list(self.db.scalars(select(Brand).where(Brand.tenant_id == tenant_id)))
+
+    def customers(self, tenant_id: int) -> list[Customer]:
+        return list(self.db.scalars(select(Customer).where(Customer.tenant_id == tenant_id)))
+
+    def vendors(self, tenant_id: int) -> list[Vendor]:
+        return list(self.db.scalars(select(Vendor).where(Vendor.tenant_id == tenant_id)))
 
     def stock(self, tenant_id: int) -> list[WarehouseStock]:
         return list(self.db.scalars(select(WarehouseStock).where(WarehouseStock.tenant_id == tenant_id)))
@@ -73,3 +82,33 @@ class ReportsRepository:
 
     def sales_returns(self, tenant_id: int) -> list[SalesReturn]:
         return list(self.db.scalars(select(SalesReturn).where(SalesReturn.tenant_id == tenant_id)))
+
+    def invoices(self, tenant_id: int) -> list[Invoice]:
+        return list(
+            self.db.scalars(
+                select(Invoice)
+                .where(Invoice.tenant_id == tenant_id)
+                .options(selectinload(Invoice.items))
+            )
+        )
+
+    def bills(self, tenant_id: int) -> list[Bill]:
+        return list(
+            self.db.scalars(
+                select(Bill)
+                .where(Bill.tenant_id == tenant_id)
+                .options(selectinload(Bill.items))
+            )
+        )
+
+    def workflow_tasks(self, tenant_id: int) -> list[WorkflowTask]:
+        return list(self.db.scalars(select(WorkflowTask).where(WorkflowTask.tenant_id == tenant_id)))
+
+    def stock_count_sessions(self, tenant_id: int) -> list[StockCountSession]:
+        return list(
+            self.db.scalars(
+                select(StockCountSession)
+                .where(StockCountSession.tenant_id == tenant_id)
+                .options(selectinload(StockCountSession.lines))
+            )
+        )

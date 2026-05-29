@@ -36,7 +36,7 @@ def update_sales_return(return_id: int, request: SalesReturnUpdate, context: Use
 
 @router.post("/sales-returns/{return_id}/submit", response_model=SalesReturnRead)
 def submit_sales_return(return_id: int, context: UserContext = Depends(require_roles(*writer_roles)), db: Session = Depends(get_db)) -> SalesReturnRead:
-    return ReturnsService(db).submit_return(context.tenant_id, return_id)
+    return ReturnsService(db).submit_return(context.tenant_id, context.user.id, return_id)
 
 
 @router.post("/sales-returns/{return_id}/cancel", response_model=SalesReturnRead)

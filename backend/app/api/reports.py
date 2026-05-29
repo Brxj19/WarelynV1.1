@@ -9,15 +9,19 @@ from app.dependencies.auth import require_roles
 from app.models.auth import UserRole
 from app.models.inventory import MovementType, ReferenceType
 from app.schemas.reports import (
+    AdminDashboard,
     BatchExpiryReportRow,
     BlockedStockReportRow,
     InventorySummaryReport,
+    InventoryDashboard,
     LocationStockReportRow,
     LowStockReportRow,
     OperationalDashboard,
+    PurchaseDashboard,
     ProductValuationReport,
     ReconciliationReport,
     ReorderSuggestionRow,
+    SalesDashboard,
     SerialStatusReportRow,
     StockMovementReportRow,
     WarehouseStockReportRow,
@@ -127,6 +131,42 @@ def operational_dashboard(
     db: Session = Depends(get_db),
 ) -> OperationalDashboard:
     return ReportsService(db).operational_dashboard(context.tenant_id, compare_previous=compare_previous)
+
+
+@router.get("/dashboard/sales", response_model=SalesDashboard)
+def sales_dashboard(
+    days: int = Query(default=30, ge=1, le=365),
+    context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.SALES_STAFF)),
+    db: Session = Depends(get_db),
+) -> SalesDashboard:
+    return ReportsService(db).sales_dashboard(context.tenant_id, days=days)
+
+
+@router.get("/dashboard/purchasing", response_model=PurchaseDashboard)
+def purchase_dashboard(
+    days: int = Query(default=30, ge=1, le=365),
+    context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.PURCHASE_STAFF, UserRole.INVENTORY_MANAGER)),
+    db: Session = Depends(get_db),
+) -> PurchaseDashboard:
+    return ReportsService(db).purchase_dashboard(context.tenant_id, days=days)
+
+
+@router.get("/dashboard/inventory", response_model=InventoryDashboard)
+def inventory_dashboard(
+    days: int = Query(default=30, ge=1, le=365),
+    context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER)),
+    db: Session = Depends(get_db),
+) -> InventoryDashboard:
+    return ReportsService(db).inventory_dashboard(context.tenant_id, days=days)
+
+
+@router.get("/dashboard/admin", response_model=AdminDashboard)
+def admin_dashboard(
+    days: int = Query(default=30, ge=1, le=365),
+    context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN)),
+    db: Session = Depends(get_db),
+) -> AdminDashboard:
+    return ReportsService(db).admin_dashboard(context.tenant_id, days=days)
 
 
 @router.get("/reports/{report_key}/export.csv")

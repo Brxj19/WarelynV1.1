@@ -60,6 +60,11 @@ def reconcile_session(session_id: int, context: UserContext = Depends(require_ro
     return session
 
 
+@router.post("/{session_id}/cancel", response_model=StockCountSessionRead)
+def cancel_session(session_id: int, context: UserContext = Depends(require_roles(*roles)), db: Session = Depends(get_db)):
+    return CycleCountService(db).cancel_session(context.tenant_id, session_id)
+
+
 @router.post("/expire-batches", response_model=ExpireBatchesResponse)
 def trigger_expire_batches(context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN)), db: Session = Depends(get_db)):
     return ExpireBatchesService(db).run(context.tenant_id)

@@ -94,6 +94,7 @@ class StockCountSessionRead(BaseModel):
     reconciled_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    lines: list["StockCountLineRead"] = []
 
 
 class StockCountLineCreate(BaseModel):

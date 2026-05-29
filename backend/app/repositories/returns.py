@@ -64,6 +64,17 @@ class ReturnsRepository:
         self.db.flush()
         return record
 
+    def get_latest_inspection(self, tenant_id: int, return_id: int) -> ReturnQCInspection | None:
+        return self.db.scalar(
+            select(ReturnQCInspection)
+            .where(
+                ReturnQCInspection.tenant_id == tenant_id,
+                ReturnQCInspection.sales_return_id == return_id,
+            )
+            .order_by(ReturnQCInspection.created_at.desc())
+            .limit(1)
+        )
+
     def returned_quantity_for_order_item(self, tenant_id: int, sales_order_item_id: int, exclude_return_id: int | None = None) -> Decimal:
         query = select(func.coalesce(func.sum(SalesReturnItem.returned_quantity), 0)).join(SalesReturn, SalesReturn.id == SalesReturnItem.sales_return_id).where(
             SalesReturnItem.tenant_id == tenant_id,

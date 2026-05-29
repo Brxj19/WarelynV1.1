@@ -170,7 +170,7 @@ export function DashboardPage() {
             {user?.role === 'TENANT_ADMIN' ? (
               <div className="flex flex-wrap gap-3">
                 {Object.entries(workflowTasks.reduce((acc, t) => { acc[t.assigned_role] = (acc[t.assigned_role] || 0) + 1; return acc; }, {})).map(([role, count]) => (
-                  <Link className="flex items-center gap-2 rounded-lg border border-warelyn-border bg-gray-50 px-3 py-2 text-sm transition-colors hover:bg-gray-100" key={role} to="/my-tasks">
+                  <Link className="flex items-center gap-2 rounded-lg border border-warelyn-border bg-gray-50 px-3 py-2 text-sm transition-colors hover:bg-gray-100" key={role} to={`/my-tasks?role=${role}`}>
                     <span className="font-bold text-warelyn-primary">{count}</span>
                     <span className="text-warelyn-muted">for {role.replace(/_/g, ' ')}</span>
                   </Link>

@@ -77,7 +77,7 @@ class PutawayTaskService:
         self.db.refresh(task)
         return task
 
-    def complete(self, tenant_id: int, task_id: int, to_location_id: int | None = None):
+    def complete(self, tenant_id: int, actor_id: int, task_id: int, to_location_id: int | None = None):
         task = self.get(tenant_id, task_id)
         if task.status not in (PutawayTaskStatus.PENDING, PutawayTaskStatus.IN_PROGRESS):
             raise AppError("INVALID_PUTAWAY_STATE", "Only pending or in-progress tasks can be completed.", 409)
@@ -89,8 +89,11 @@ class PutawayTaskService:
         self.db.refresh(task)
         try:
             workflow = WorkflowService(self.db)
-            workflow.log_event(tenant_id, "PUTAWAY_COMPLETED", "putaway_task", task.id, None, {"receipt_id": task.receipt_id})
+            workflow.log_event(tenant_id, "PUTAWAY_COMPLETED", "putaway_task", task.id, actor_id, {"receipt_id": task.receipt_id})
             if task.receipt_id:
+                workflow.complete_entity_step(
+                    tenant_id, "purchase_receipt", task.receipt_id, "PUTAWAY_STOCK", actor_id
+                )
                 workflow.cancel_entity_tasks(tenant_id, "purchase_receipt", task.receipt_id)
                 from app.repositories.purchasing import PurchasingRepository
                 receipt = PurchasingRepository(self.db).get_receipt(tenant_id, task.receipt_id)
@@ -155,6 +158,13 @@ class CycleCountService:
         session = self.get_session(tenant_id, session_id)
         if session.status not in (StockCountSessionStatus.DRAFT, StockCountSessionStatus.IN_PROGRESS):
             raise AppError("INVALID_SESSION_STATE", "Lines can only be added to draft or in-progress sessions.", 409)
+        existing_lines = self.repository.list_lines(tenant_id, session_id)
+        if any(line.product_id == data["product_id"] and line.location_id == data["location_id"] for line in existing_lines):
+            raise AppError(
+                "DUPLICATE_COUNT_LINE",
+                "A count line for this product and location already exists in this session.",
+                409,
+            )
         stock = self.inventory_repo.get_stock(tenant_id, data["product_id"], session.warehouse_id, data["location_id"])
         system_qty = stock.quantity_on_hand if stock else Decimal("0")
         line = self.repository.create_line({
@@ -200,25 +210,44 @@ class CycleCountService:
         self.db.refresh(session)
         return session
 
+    def cancel_session(self, tenant_id: int, session_id: int):
+        session = self.repository.lock_session(tenant_id, session_id)
+        if session is None:
+            raise AppError("CYCLE_COUNT_SESSION_NOT_FOUND", "Cycle count session not found.", 404)
+        if session.status in (StockCountSessionStatus.RECONCILED, StockCountSessionStatus.CANCELLED):
+            raise AppError("INVALID_SESSION_STATE", "Reconciled or already cancelled sessions cannot be cancelled.", 409)
+        session.status = StockCountSessionStatus.CANCELLED
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
     def reconcile(self, tenant_id: int, session_id: int, actor_id: int):
-        session = self.get_session(tenant_id, session_id)
+        session = self.repository.lock_session(tenant_id, session_id)
+        if session is None:
+            raise AppError("CYCLE_COUNT_SESSION_NOT_FOUND", "Cycle count session not found.", 404)
         if session.status != StockCountSessionStatus.SUBMITTED:
             raise AppError("INVALID_SESSION_STATE", "Only submitted sessions can be reconciled.", 409)
         lines = self.repository.list_lines(tenant_id, session_id)
         adjustments = []
         for line in lines:
-            if line.variance is None or line.variance == Decimal("0"):
+            if line.counted_quantity is None:
                 continue
-            import uuid
+            current_stock = self.inventory_repo.get_stock(tenant_id, line.product_id, session.warehouse_id, line.location_id)
+            current_system_qty = current_stock.quantity_on_hand if current_stock else Decimal("0")
+            actual_variance = line.counted_quantity - current_system_qty
+            line.system_quantity = current_system_qty
+            line.variance = actual_variance
+            if actual_variance == Decimal("0"):
+                continue
             self.engine.adjust_stock(tenant_id, actor_id, {
                 "product_id": line.product_id,
                 "warehouse_id": session.warehouse_id,
                 "location_id": line.location_id,
-                "delta": line.variance,
+                "delta": actual_variance,
                 "reference_type": ReferenceType.RECONCILIATION,
                 "reference_id": session.session_number,
                 "note": f"Cycle count adjustment: session {session.session_number}",
-                "idempotency_key": f"cc-{session_id}-{line.id}-{uuid.uuid4().hex[:8]}",
+                "idempotency_key": f"cc-reconcile-{session_id}-{line.id}",
             })
             adjustments.append(line.id)
         session.status = StockCountSessionStatus.RECONCILED

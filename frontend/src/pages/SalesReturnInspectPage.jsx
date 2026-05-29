@@ -38,35 +38,36 @@ export function SalesReturnInspectPage() {
   const [error, setError] = useState('');
   const [isConfirming, setIsConfirming] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      setIsLoading(true);
-      setError('');
-      try {
-        const [row, products] = await Promise.all([
-          returnsService.getSalesReturn(accessToken, id),
-          catalogService.listProducts(accessToken),
-        ]);
-        setSalesReturn(row);
-        setProductsById(Object.fromEntries(products.map((product) => [product.id, product])));
-        setItems(
-          row.items.map((item) => ({
-            sales_return_item_id: item.id,
-            qc_status: item.qc_status === 'PENDING' ? 'ACCEPTED_RESTOCK' : item.qc_status,
-            accepted_quantity: item.accepted_quantity === '0.000' ? item.returned_quantity : item.accepted_quantity,
-            rejected_quantity: item.rejected_quantity,
-            reason: item.reason ?? '',
-            notes: item.notes ?? '',
-            returned_quantity: item.returned_quantity,
-            product_id: item.product_id,
-          })),
-        );
-      } catch (loadError) {
-        setError(loadError.message);
-      } finally {
-        setIsLoading(false);
-      }
+  async function load() {
+    setIsLoading(true);
+    setError('');
+    try {
+      const [row, products] = await Promise.all([
+        returnsService.getSalesReturn(accessToken, id),
+        catalogService.listProducts(accessToken),
+      ]);
+      setSalesReturn(row);
+      setProductsById(Object.fromEntries(products.map((product) => [product.id, product])));
+      setItems(
+        row.items.map((item) => ({
+          sales_return_item_id: item.id,
+          qc_status: item.qc_status === 'PENDING' ? 'ACCEPTED_RESTOCK' : item.qc_status,
+          accepted_quantity: item.accepted_quantity === '0.000' ? item.returned_quantity : item.accepted_quantity,
+          rejected_quantity: item.rejected_quantity,
+          reason: item.reason ?? '',
+          notes: item.notes ?? '',
+          returned_quantity: item.returned_quantity,
+          product_id: item.product_id,
+        })),
+      );
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setIsLoading(false);
     }
+  }
+
+  useEffect(() => {
     load();
   }, [accessToken, id]);
 
@@ -95,12 +96,15 @@ export function SalesReturnInspectPage() {
     setError('');
     try {
       const inspectionPayload = { notes: note, items: items.map(({ returned_quantity, product_id, ...item }) => item) };
-      await returnsService.inspectSalesReturn(accessToken, id, inspectionPayload);
+      if (salesReturn.status !== 'INSPECTION_PENDING') {
+        await returnsService.inspectSalesReturn(accessToken, id, inspectionPayload);
+      }
       await returnsService.processSalesReturn(accessToken, id, { idempotency_key: idempotencyKey, note });
       setIsConfirming(false);
       navigate(`/returns/${id}`);
     } catch (saveError) {
       setError(saveError.message);
+      await load();
     } finally {
       setIsSaving(false);
     }
@@ -122,9 +126,9 @@ export function SalesReturnInspectPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/returns/qc" />
+      <BackButton to={`/returns/${id}`} />
       <PageHeader
-        backTo="/returns"
+        backTo={`/returns/${id}`}
         description="Choose the final QC decision for each returned line. The preview below mirrors backend outcomes and does not calculate authoritative stock on the frontend."
         kicker="QC inspection"
         title={`Inspect ${salesReturn.return_number}`}

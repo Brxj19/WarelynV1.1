@@ -31,3 +31,7 @@ export function submitSession(accessToken, sessionId) {
 export function reconcileSession(accessToken, sessionId) {
   return apiRequest(`/cycle-counts/${sessionId}/reconcile`, { accessToken, method: 'POST', body: JSON.stringify({}) });
 }
+
+export function cancelSession(accessToken, sessionId) {
+  return apiRequest(`/cycle-counts/${sessionId}/cancel`, { accessToken, method: 'POST', body: JSON.stringify({}) });
+}

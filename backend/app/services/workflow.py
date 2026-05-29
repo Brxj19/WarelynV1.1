@@ -17,6 +17,12 @@ class WorkflowService:
         values["created_by"] = created_by
         return self.repository.create_task(tenant_id, values)
 
+    def start_task(self, tenant_id: int, task_id: int, user_id: int) -> WorkflowTask | None:
+        task = self.repository.start_task(tenant_id, task_id, user_id)
+        if task:
+            self.db.commit()
+        return task
+
     def complete_task(self, tenant_id: int, task_id: int, user_id: int) -> WorkflowTask | None:
         task = self.repository.complete_task(tenant_id, task_id, user_id)
         if task:
@@ -34,7 +40,15 @@ class WorkflowService:
     def cancel_entity_tasks(self, tenant_id: int, entity_type: str, entity_id: int) -> None:
         self.repository.cancel_tasks_for_entity(tenant_id, entity_type, entity_id)
 
+    def complete_entity_step(
+        self, tenant_id: int, entity_type: str, entity_id: int, step_key: str, user_id: int
+    ) -> None:
+        self.repository.complete_tasks_for_entity_step(tenant_id, entity_type, entity_id, step_key, user_id)
+        self.db.commit()
+
     def get_my_tasks(self, tenant_id: int, user_id: int, user_role: str, status_filter: str | None = None) -> list[WorkflowTask]:
+        if user_role == "TENANT_ADMIN":
+            return self.repository.get_all_tasks(tenant_id, status_filter)
         role_tasks = self.repository.get_tasks_for_role(tenant_id, user_role, status_filter)
         user_tasks = self.repository.get_tasks_for_user(tenant_id, user_id, status_filter)
         seen_ids: set[int] = set()

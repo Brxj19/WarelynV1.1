@@ -44,7 +44,7 @@ def update_purchase_order(po_id: int, request: PurchaseOrderUpdate, context: Use
 
 @router.post("/purchase-orders/{po_id}/submit", response_model=PurchaseOrderRead)
 def submit_purchase_order(po_id: int, context: UserContext = Depends(require_roles(*writer_roles)), db: Session = Depends(get_db)) -> PurchaseOrderRead:
-    return PurchasingService(db).submit_purchase_order(context.tenant_id, po_id)
+    return PurchasingService(db).submit_purchase_order(context.tenant_id, context.user.id, po_id)
 
 
 @router.post("/purchase-orders/{po_id}/approve", response_model=PurchaseOrderRead)

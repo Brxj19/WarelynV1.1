@@ -43,6 +43,9 @@ class SalesRepository:
     def list_fulfillments_for_order(self, tenant_id: int, order_id: int) -> list[SalesFulfillment]:
         return list(self.db.scalars(select(SalesFulfillment).where(SalesFulfillment.tenant_id == tenant_id, SalesFulfillment.sales_order_id == order_id).options(selectinload(SalesFulfillment.items)).order_by(SalesFulfillment.created_at.desc(), SalesFulfillment.id.desc())))
 
+    def list_all_fulfillments(self, tenant_id: int) -> list[SalesFulfillment]:
+        return list(self.db.scalars(select(SalesFulfillment).where(SalesFulfillment.tenant_id == tenant_id).options(selectinload(SalesFulfillment.items)).order_by(SalesFulfillment.created_at.desc(), SalesFulfillment.id.desc())))
+
     def get_fulfillment(self, tenant_id: int, fulfillment_id: int) -> SalesFulfillment | None:
         return self.db.scalar(select(SalesFulfillment).where(SalesFulfillment.id == fulfillment_id, SalesFulfillment.tenant_id == tenant_id).options(selectinload(SalesFulfillment.items)))
 

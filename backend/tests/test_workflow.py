@@ -68,6 +68,28 @@ def _setup_dimension(client: TestClient, token: str) -> dict:
     }
 
 
+def _create_return_for_order(client: TestClient, token: str, order: dict, dimension: dict, return_number: str) -> dict:
+    response = client.post(
+        "/api/sales-returns",
+        json={
+            "sales_order_id": order["id"],
+            "return_number": return_number,
+            "reason": "Workflow return",
+            "items": [
+                {
+                    "sales_order_item_id": order["items"][0]["id"],
+                    "warehouse_id": dimension["warehouse_id"],
+                    "location_id": dimension["location_id"],
+                    "returned_quantity": "1",
+                }
+            ],
+        },
+        headers=_headers(token),
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 class TestConfirmSalesOrderWorkflow:
     def test_confirm_creates_exactly_one_pick_task(self, client: TestClient, db_session: Session):
         token = _register_and_login(client)
@@ -205,6 +227,46 @@ class TestFulfillmentWorkflow:
         assert len(tasks) == 1
         assert tasks[0].assigned_role == "SALES_STAFF"
 
+    def test_pick_completion_marks_pick_order_task_completed(self, client: TestClient, db_session: Session):
+        token = _register_and_login(client, "pick-complete@wf.com")
+        dim = _setup_dimension(client, token)
+        h = _headers(token)
+
+        order = client.post("/api/sales-orders", json={
+            "customer_id": dim["customer_id"],
+            "order_number": "SO-WFT-5",
+            "order_date": "2026-05-29",
+            "items": [{"product_id": dim["product_id"], "ordered_quantity": "2", "unit_price": "10.00"}],
+        }, headers=h)
+        assert order.status_code == 201
+        so = order.json()
+
+        confirm = client.post(f"/api/sales-orders/{so['id']}/confirm", json={
+            "idempotency_key": "wft-confirm-5",
+            "allocations": [{"sales_order_item_id": so["items"][0]["id"], "warehouse_id": dim["warehouse_id"], "location_id": dim["location_id"], "quantity": "2"}],
+        }, headers=h)
+        assert confirm.status_code == 200
+
+        tasks = client.get(f"/api/sales-orders/{so['id']}/pick-tasks", headers=h)
+        assert tasks.status_code == 200
+        pick_task = tasks.json()[0]
+        picked = client.post(
+            f"/api/pick-tasks/{pick_task['id']}/pick",
+            json={"items": [{"pick_task_item_id": item["id"], "picked_quantity": item["required_quantity"]} for item in pick_task["items"]]},
+            headers=h,
+        )
+        assert picked.status_code == 200
+
+        tenant = db_session.query(Tenant).filter(Tenant.company_name == "WF Co").one()
+        workflow_task = db_session.query(WorkflowTask).filter(
+            WorkflowTask.tenant_id == tenant.id,
+            WorkflowTask.entity_type == "sales_order",
+            WorkflowTask.entity_id == so["id"],
+            WorkflowTask.step_key == "PICK_ORDER",
+        ).one()
+        assert workflow_task.status == WorkflowTaskStatus.COMPLETED
+        assert workflow_task.completed_by is not None
+
 
 class TestPurchaseWorkflow:
     def test_commit_receipt_creates_putaway_task(self, client: TestClient, db_session: Session):
@@ -250,10 +312,30 @@ class TestPurchaseWorkflow:
 
 
 class TestMyTasksFiltering:
+    def test_tenant_admin_sees_all_role_queues(self, client: TestClient, db_session: Session):
+        tenant = _create_tenant(db_session)
+        _create_user(db_session, tenant.id, "admin@wf.com", UserRole.TENANT_ADMIN)
+        _create_user(db_session, tenant.id, "im-all@wf.com", UserRole.INVENTORY_MANAGER)
+        _create_user(db_session, tenant.id, "sales-all@wf.com", UserRole.SALES_STAFF)
+        _create_user(db_session, tenant.id, "purchase-all@wf.com", UserRole.PURCHASE_STAFF)
+
+        db_session.add_all([
+            WorkflowTask(tenant_id=tenant.id, workflow_type="SALES", entity_type="sales_order", entity_id=10, step_key="PICK_ORDER", title="Pick order", assigned_role="INVENTORY_MANAGER", priority="NORMAL", status=WorkflowTaskStatus.OPEN),
+            WorkflowTask(tenant_id=tenant.id, workflow_type="SALES", entity_type="sales_order", entity_id=11, step_key="CREATE_INVOICE", title="Create invoice", assigned_role="SALES_STAFF", priority="NORMAL", status=WorkflowTaskStatus.OPEN),
+            WorkflowTask(tenant_id=tenant.id, workflow_type="PURCHASING", entity_type="purchase_order", entity_id=12, step_key="RECORD_BILL", title="Record bill", assigned_role="PURCHASE_STAFF", priority="NORMAL", status=WorkflowTaskStatus.OPEN),
+        ])
+        db_session.commit()
+
+        token = _login(client, "admin@wf.com")
+        resp = client.get("/api/workflow/my-tasks", headers=_headers(token))
+        assert resp.status_code == 200
+        roles = {task["assigned_role"] for task in resp.json()}
+        assert {"INVENTORY_MANAGER", "SALES_STAFF", "PURCHASE_STAFF"}.issubset(roles)
+
     def test_inventory_manager_sees_own_tasks(self, client: TestClient, db_session: Session):
         tenant = _create_tenant(db_session)
-        im = _create_user(db_session, tenant.id, "im@wf.com", UserRole.INVENTORY_MANAGER)
-        sales = _create_user(db_session, tenant.id, "sales@wf.com", UserRole.SALES_STAFF)
+        _create_user(db_session, tenant.id, "im@wf.com", UserRole.INVENTORY_MANAGER)
+        _create_user(db_session, tenant.id, "sales@wf.com", UserRole.SALES_STAFF)
         db_session.flush()
 
         im_task = WorkflowTask(tenant_id=tenant.id, workflow_type="SALES", entity_type="sales_order", entity_id=1, step_key="PICK_ORDER", title="Pick order", assigned_role="INVENTORY_MANAGER", priority="NORMAL", status=WorkflowTaskStatus.OPEN)
@@ -283,6 +365,31 @@ class TestMyTasksFiltering:
         assert resp.status_code == 200
         assert len(resp.json()) == 0
 
+    def test_directly_assigned_user_can_complete_task_even_when_role_differs(self, client: TestClient, db_session: Session):
+        tenant = _create_tenant(db_session)
+        assignee = _create_user(db_session, tenant.id, "direct@wf.com", UserRole.INVENTORY_MANAGER)
+        task = WorkflowTask(
+            tenant_id=tenant.id,
+            workflow_type="SALES",
+            entity_type="sales_order",
+            entity_id=22,
+            step_key="CREATE_INVOICE",
+            title="Create invoice",
+            assigned_role="SALES_STAFF",
+            assigned_to_user_id=assignee.id,
+            priority="NORMAL",
+            status=WorkflowTaskStatus.OPEN,
+        )
+        db_session.add(task)
+        db_session.commit()
+
+        token = _login(client, "direct@wf.com")
+        resp = client.post(f"/api/workflow/tasks/{task.id}/complete", json={}, headers=_headers(token))
+        assert resp.status_code == 200
+        db_session.refresh(task)
+        assert task.status == WorkflowTaskStatus.COMPLETED
+        assert task.completed_by == assignee.id
+
     def test_viewer_cannot_access_my_tasks(self, client: TestClient, db_session: Session):
         tenant = _create_tenant(db_session)
         _create_user(db_session, tenant.id, "viewer@wf.com", UserRole.VIEWER)
@@ -291,3 +398,64 @@ class TestMyTasksFiltering:
         token = _login(client, "viewer@wf.com")
         resp = client.get("/api/workflow/my-tasks", headers=_headers(token))
         assert resp.status_code == 403
+
+
+class TestReturnWorkflow:
+    def test_process_return_marks_return_qc_task_completed(self, client: TestClient, db_session: Session):
+        token = _register_and_login(client, "return-complete@wf.com")
+        dim = _setup_dimension(client, token)
+        h = _headers(token)
+
+        order = client.post("/api/sales-orders", json={
+            "customer_id": dim["customer_id"],
+            "order_number": "SO-WFT-RET-1",
+            "order_date": "2026-05-29",
+            "items": [{"product_id": dim["product_id"], "ordered_quantity": "2", "unit_price": "10.00"}],
+        }, headers=h)
+        assert order.status_code == 201
+        so = order.json()
+
+        confirm = client.post(f"/api/sales-orders/{so['id']}/confirm", json={
+            "idempotency_key": "wft-confirm-ret-1",
+            "allocations": [{"sales_order_item_id": so["items"][0]["id"], "warehouse_id": dim["warehouse_id"], "location_id": dim["location_id"], "quantity": "2"}],
+        }, headers=h)
+        assert confirm.status_code == 200
+
+        tasks = client.get(f"/api/sales-orders/{so['id']}/pick-tasks", headers=h)
+        assert tasks.status_code == 200
+        pick_task = tasks.json()[0]
+        picked = client.post(
+            f"/api/pick-tasks/{pick_task['id']}/pick",
+            json={"items": [{"pick_task_item_id": item["id"], "picked_quantity": item["required_quantity"]} for item in pick_task["items"]]},
+            headers=h,
+        )
+        assert picked.status_code == 200
+
+        order_response = client.get(f"/api/sales-orders/{so['id']}", headers=h)
+        assert order_response.status_code == 200
+        sales_return = _create_return_for_order(client, token, order_response.json(), dim, "RET-WFT-1")
+
+        submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=h)
+        assert submitted.status_code == 200
+        inspect = client.post(
+            f"/api/sales-returns/{sales_return['id']}/inspect",
+            json={"items": [{"sales_return_item_id": submitted.json()["items"][0]["id"], "qc_status": "ACCEPTED_RESTOCK", "accepted_quantity": "1", "rejected_quantity": "0"}]},
+            headers=h,
+        )
+        assert inspect.status_code == 200
+        process = client.post(
+            f"/api/sales-returns/{sales_return['id']}/process",
+            json={"idempotency_key": "wft-return-process-1"},
+            headers=h,
+        )
+        assert process.status_code == 200
+
+        tenant = db_session.query(Tenant).filter(Tenant.company_name == "WF Co").one()
+        workflow_task = db_session.query(WorkflowTask).filter(
+            WorkflowTask.tenant_id == tenant.id,
+            WorkflowTask.entity_type == "sales_return",
+            WorkflowTask.entity_id == sales_return["id"],
+            WorkflowTask.step_key == "RETURN_QC",
+        ).one()
+        assert workflow_task.status == WorkflowTaskStatus.COMPLETED
+        assert workflow_task.completed_by is not None

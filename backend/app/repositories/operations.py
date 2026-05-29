@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.operations import (
     OutboxEvent,
@@ -76,10 +76,29 @@ class CycleCountRepository:
         self.db = db
 
     def list_sessions(self, tenant_id: int) -> list[StockCountSession]:
-        return list(self.db.scalars(select(StockCountSession).where(StockCountSession.tenant_id == tenant_id).order_by(StockCountSession.created_at.desc())))
+        return list(
+            self.db.scalars(
+                select(StockCountSession)
+                .where(StockCountSession.tenant_id == tenant_id)
+                .options(selectinload(StockCountSession.lines))
+                .order_by(StockCountSession.created_at.desc())
+            )
+        )
 
     def get_session(self, tenant_id: int, session_id: int) -> StockCountSession | None:
-        return self.db.scalar(select(StockCountSession).where(StockCountSession.id == session_id, StockCountSession.tenant_id == tenant_id))
+        return self.db.scalar(
+            select(StockCountSession)
+            .where(StockCountSession.id == session_id, StockCountSession.tenant_id == tenant_id)
+            .options(selectinload(StockCountSession.lines))
+        )
+
+    def lock_session(self, tenant_id: int, session_id: int) -> StockCountSession | None:
+        return self.db.scalar(
+            select(StockCountSession)
+            .where(StockCountSession.id == session_id, StockCountSession.tenant_id == tenant_id)
+            .options(selectinload(StockCountSession.lines))
+            .with_for_update()
+        )
 
     def create_session(self, data: dict) -> StockCountSession:
         session = StockCountSession(**data)

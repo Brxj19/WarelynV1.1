@@ -12,6 +12,7 @@ from app.schemas.inventory import (
     ReconciliationDryRunResponse,
     ReleaseReservationRequest,
     ReserveStockRequest,
+    StockReservationRead,
     StockAdjustRequest,
     StockInRequest,
     StockLedgerEntryRead,
@@ -36,6 +37,11 @@ def list_stock(context: UserContext = Depends(require_roles(*read_roles)), db: S
 @router.get("/ledger", response_model=list[StockLedgerEntryRead])
 def list_ledger(context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> list[StockLedgerEntryRead]:
     return InventoryService(db).list_ledger(context.tenant_id)
+
+
+@router.get("/reservations", response_model=list[StockReservationRead])
+def list_reservations(context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> list[StockReservationRead]:
+    return InventoryService(db).list_reservations(context.tenant_id)
 
 
 @router.get("/batches", response_model=list[InventoryBatchRead])

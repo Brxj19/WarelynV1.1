@@ -29,6 +29,9 @@ class InventoryRepository:
     def list_ledger(self, tenant_id: int) -> list[StockLedgerEntry]:
         return list(self.db.scalars(select(StockLedgerEntry).where(StockLedgerEntry.tenant_id == tenant_id).order_by(StockLedgerEntry.created_at.desc(), StockLedgerEntry.id.desc())))
 
+    def list_reservations(self, tenant_id: int) -> list[StockReservation]:
+        return list(self.db.scalars(select(StockReservation).where(StockReservation.tenant_id == tenant_id).order_by(StockReservation.created_at.desc(), StockReservation.id.desc())))
+
     def list_batches(self, tenant_id: int) -> list[InventoryBatch]:
         return list(self.db.scalars(select(InventoryBatch).where(InventoryBatch.tenant_id == tenant_id).order_by(InventoryBatch.created_at.desc(), InventoryBatch.id.desc())))
 

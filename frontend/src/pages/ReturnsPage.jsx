@@ -18,7 +18,8 @@ import * as returnsService from '../services/returnsService.js';
 import * as salesService from '../services/salesService.js';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']);
-const statusTabs = ['ALL', 'DRAFT', 'SUBMITTED', 'INSPECTION_PENDING', 'PARTIALLY_PROCESSED', 'PROCESSED', 'CANCELLED'];
+const canQC = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER']);
+const statusTabs = ['ALL', 'DRAFT', 'SUBMITTED', 'INSPECTION_PENDING', 'PROCESSED', 'CANCELLED'];
 
 export function ReturnsPage({ mode = 'all' }) {
   const { accessToken, user } = useAuth();
@@ -124,7 +125,7 @@ export function ReturnsPage({ mode = 'all' }) {
             onSearchChange={setSearch}
             searchPlaceholder="Search return number, sales order, or customer"
             searchValue={search}
-            tabs={(isQcMode ? ['INSPECTION_PENDING', 'SUBMITTED', 'PARTIALLY_PROCESSED', 'PROCESSED'] : statusTabs).map((status) => ({
+            tabs={(isQcMode ? ['INSPECTION_PENDING', 'SUBMITTED', 'PROCESSED'] : statusTabs).map((status) => ({
               key: status,
               label: status === 'ALL' ? 'All' : status.replaceAll('_', ' '),
               active: statusFilter === status,
@@ -161,7 +162,7 @@ export function ReturnsPage({ mode = 'all' }) {
                 <td className="text-right">
                   <ActionMenu items={[
                     { label: 'View', icon: Eye, onClick: () => navigate(`/returns/${row.id}`) },
-                    ...(canWrite.has(user?.role) && ['SUBMITTED', 'INSPECTION_PENDING'].includes(row.status) ? [{ label: 'Inspect', icon: ClipboardCheck, onClick: () => navigate(`/returns/${row.id}/inspect`) }] : []),
+                    ...(canQC.has(user?.role) && ['SUBMITTED', 'INSPECTION_PENDING'].includes(row.status) ? [{ label: 'Inspect', icon: ClipboardCheck, onClick: () => navigate(`/returns/${row.id}/inspect`) }] : []),
                   ]} />
                 </td>
               </tr>

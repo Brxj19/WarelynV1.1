@@ -36,6 +36,10 @@ export function listSalesFulfillments(accessToken, orderId) {
   return apiRequest(`/sales-orders/${orderId}/fulfillments`, { accessToken });
 }
 
+export function listAllSalesFulfillments(accessToken) {
+  return apiRequest('/sales-fulfillments', { accessToken });
+}
+
 export function getSalesFulfillment(accessToken, fulfillmentId) {
   return apiRequest(`/sales-fulfillments/${fulfillmentId}`, { accessToken });
 }

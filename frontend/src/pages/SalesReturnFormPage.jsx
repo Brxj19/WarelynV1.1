@@ -40,20 +40,43 @@ export function SalesReturnFormPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
+  function buildReturnableOrderMap(returnRows) {
+    const returnedByOrderItemId = {};
+    for (const salesReturn of returnRows) {
+      if (salesReturn.status === 'CANCELLED') continue;
+      for (const item of salesReturn.items ?? []) {
+        returnedByOrderItemId[item.sales_order_item_id] = (returnedByOrderItemId[item.sales_order_item_id] ?? 0) + Number(item.returned_quantity);
+      }
+    }
+    return returnedByOrderItemId;
+  }
+
   useEffect(() => {
     async function load() {
       setIsLoading(true);
       setError('');
       try {
-        const [orderRows, productRows, warehouseRows] = await Promise.all([
+        const [orderRows, productRows, warehouseRows, returnRows] = await Promise.all([
           salesService.listSalesOrders(accessToken),
           catalogService.listProducts(accessToken),
           warehouseService.listWarehouses(accessToken),
+          returnsService.listSalesReturns(accessToken),
         ]);
         const locationPairs = await Promise.all(
           warehouseRows.map(async (warehouse) => [warehouse.id, await warehouseService.listWarehouseLocations(accessToken, warehouse.id)]),
         );
-        setOrders(orderRows.filter((order) => returnableStatuses.has(order.status)));
+        const returnedByOrderItemId = buildReturnableOrderMap(returnRows);
+        const returnableOrders = orderRows
+          .filter((order) => returnableStatuses.has(order.status))
+          .map((order) => ({
+            ...order,
+            items: order.items.map((item) => ({
+              ...item,
+              returnable_quantity: Math.max(Number(item.fulfilled_quantity) - (returnedByOrderItemId[item.id] ?? 0), 0),
+            })),
+          }))
+          .filter((order) => order.items.some((item) => item.returnable_quantity > 0));
+        setOrders(returnableOrders);
         setProductsById(Object.fromEntries(productRows.map((product) => [product.id, product])));
         setWarehouses(warehouseRows);
         setLocationsByWarehouse(Object.fromEntries(locationPairs));
@@ -102,12 +125,12 @@ export function SalesReturnFormPage() {
         : '';
     setLines(
       selectedOrder.items
-        .filter((item) => Number(item.fulfilled_quantity) > 0)
+        .filter((item) => Number(item.returnable_quantity ?? item.fulfilled_quantity) > 0)
         .map((item) => ({
           sales_order_item_id: item.id,
           warehouse_id: firstWarehouse,
           location_id: firstLocation,
-          returned_quantity: '1',
+          returned_quantity: String(item.returnable_quantity ?? item.fulfilled_quantity),
           batch_id: '',
           serial_id: '',
           include: true,
@@ -237,12 +260,13 @@ export function SalesReturnFormPage() {
                     <span>
                       <span className="block">{product?.name ?? `Product #${orderItem?.product_id}`}</span>
                       <span className="mt-1 block text-xs font-normal text-warelyn-muted">
-                        SKU {product?.sku ?? '-'} • Fulfilled {formatDecimal(orderItem?.fulfilled_quantity)}
+                        SKU {product?.sku ?? '-'} • Fulfilled {formatDecimal(orderItem?.fulfilled_quantity)} • Returnable {formatDecimal(orderItem?.returnable_quantity ?? orderItem?.fulfilled_quantity)}
                       </span>
                     </span>
                   </label>
                   <Input
-                    label="Return qty"
+                    label={`Return qty (max ${formatDecimal(orderItem?.returnable_quantity ?? orderItem?.fulfilled_quantity)})`}
+                    max={String(orderItem?.returnable_quantity ?? orderItem?.fulfilled_quantity ?? '')}
                     min="0.001"
                     step="0.001"
                     type="number"

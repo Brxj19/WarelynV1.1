@@ -54,7 +54,7 @@ class PurchasingService:
             self._replace_order_items(tenant_id, po.id, items)
         return self._commit_and_get_po(tenant_id, po.id)
 
-    def submit_purchase_order(self, tenant_id: int, po_id: int) -> PurchaseOrder:
+    def submit_purchase_order(self, tenant_id: int, actor_id: int, po_id: int) -> PurchaseOrder:
         po = self.get_purchase_order(tenant_id, po_id)
         if po.status != PurchaseOrderStatus.DRAFT:
             raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only draft purchase orders can be submitted.", 409)
@@ -65,7 +65,7 @@ class PurchasingService:
         result = self._commit_and_get_po(tenant_id, po.id)
         try:
             workflow = WorkflowService(self.db)
-            workflow.log_event(tenant_id, "PURCHASE_ORDER_SUBMITTED", "purchase_order", po.id, None, {"po_number": po.po_number})
+            workflow.log_event(tenant_id, "PURCHASE_ORDER_SUBMITTED", "purchase_order", po.id, actor_id, {"po_number": po.po_number})
             total_value = sum((item.unit_cost or Decimal("0")) * item.ordered_quantity for item in result.items)
             workflow.create_task(tenant_id, WorkflowTaskCreate(
                 workflow_type="PURCHASING",
@@ -77,7 +77,7 @@ class PurchasingService:
                 assigned_role="TENANT_ADMIN",
                 priority="HIGH" if total_value > Decimal("10000") else "NORMAL",
                 action_url=f"/purchases/{po.id}",
-            ))
+            ), created_by=actor_id)
             self.db.commit()
         except Exception:
             pass
@@ -93,6 +93,9 @@ class PurchasingService:
         try:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "PURCHASE_ORDER_APPROVED", "purchase_order", po.id, actor_id, {"po_number": po.po_number})
+            workflow.complete_entity_step(
+                tenant_id, "purchase_order", po.id, "APPROVE_PO", actor_id
+            )
             workflow.cancel_entity_tasks(tenant_id, "purchase_order", po.id)
             self.db.commit()
         except Exception:

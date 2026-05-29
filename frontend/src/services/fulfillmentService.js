@@ -40,6 +40,10 @@ export function listPackagesForOrder(accessToken, orderId) {
   return apiRequest(`/sales-orders/${orderId}/packages`, { accessToken });
 }
 
+export function listAllPackages(accessToken) {
+  return apiRequest('/packages', { accessToken });
+}
+
 export function getPackage(accessToken, packageId) {
   return apiRequest(`/packages/${packageId}`, { accessToken });
 }

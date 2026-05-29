@@ -25,7 +25,6 @@ import * as warehouseService from '../services/warehouseService.js';
 const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10';
 const countSteps = [
   { key: 'DRAFT', label: 'Draft' },
-  { key: 'IN_PROGRESS', label: 'Counting' },
   { key: 'SUBMITTED', label: 'Submitted' },
   { key: 'RECONCILED', label: 'Reconciled' },
 ];
@@ -33,12 +32,22 @@ const countSteps = [
 export function CycleCountsPage() {
   const { accessToken } = useAuth();
   const [sessions, setSessions] = useState([]);
+  const [warehousesById, setWarehousesById] = useState({});
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    cycleCountService.listSessions(accessToken).then(setSessions).catch((e) => setError(e.message)).finally(() => setIsLoading(false));
+    Promise.all([
+      cycleCountService.listSessions(accessToken),
+      warehouseService.listWarehouses(accessToken),
+    ])
+      .then(([sessionRows, warehouseRows]) => {
+        setSessions(sessionRows);
+        setWarehousesById(Object.fromEntries(warehouseRows.map((warehouse) => [warehouse.id, warehouse])));
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setIsLoading(false));
   }, [accessToken]);
 
   const rows = useMemo(() => {
@@ -88,7 +97,7 @@ export function CycleCountsPage() {
                   </Link>
                 </td>
                 <td><StatusBadge status={session.status}>{session.status}</StatusBadge></td>
-                <td>Warehouse #{session.warehouse_id}</td>
+                <td>{warehousesById[session.warehouse_id]?.name ?? `#${session.warehouse_id}`}</td>
                 <td>{formatDate(session.created_at)}</td>
               </tr>
             ))}
@@ -172,6 +181,7 @@ export function CycleCountDetailPage() {
   const [lines, setLines] = useState([]);
   const [products, setProducts] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [warehouseName, setWarehouseName] = useState('');
   const [newLine, setNewLine] = useState({ product_id: '', location_id: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -183,14 +193,15 @@ export function CycleCountDetailPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [sessionRow, lineRows, productRows] = await Promise.all([
+      const [sessionRow, productRows, warehouseRows] = await Promise.all([
         cycleCountService.getSession(accessToken, id),
-        cycleCountService.listLines(accessToken, id),
         catalogService.listProducts(accessToken),
+        warehouseService.listWarehouses(accessToken),
       ]);
       setSession(sessionRow);
-      setLines(lineRows);
+      setLines(sessionRow.lines || []);
       setProducts(productRows);
+      setWarehouseName(warehouseRows.find((warehouse) => warehouse.id === sessionRow.warehouse_id)?.name ?? `#${sessionRow.warehouse_id}`);
       const locs = await warehouseService.listWarehouseLocations(accessToken, sessionRow.warehouse_id);
       setLocations(locs);
       if (locs.length && !newLine.location_id) setNewLine((n) => ({ ...n, location_id: String(locs[0].id) }));
@@ -263,6 +274,20 @@ export function CycleCountDetailPage() {
       <RecordDetailShell
         actions={
           <div className="flex flex-wrap gap-2">
+            {mayWrite && ['DRAFT', 'IN_PROGRESS', 'SUBMITTED'].includes(session.status) ? (
+              <Button
+                disabled={isSaving}
+                variant="danger"
+                onClick={() => setPendingAction({
+                  label: 'Cancel session',
+                  description: 'Cancel this cycle count session. No stock adjustments will be made.',
+                  run: () => runAction(() => cycleCountService.cancelSession(accessToken, id)),
+                  variant: 'danger',
+                })}
+              >
+                Cancel
+              </Button>
+            ) : null}
             {mayWrite && canSubmit ? (
               <Button disabled={isSaving} onClick={() => setPendingAction({ label: 'Submit count', description: 'Submit this cycle count for reconciliation review. No further counting after submission.', run: () => runAction(() => cycleCountService.submitSession(accessToken, id)), variant: 'primary' })}>
                 Submit
@@ -279,7 +304,7 @@ export function CycleCountDetailPage() {
         description="Count physical stock, record variances, and reconcile to adjust inventory levels."
         kicker="Cycle count"
         meta={[
-          { label: 'Warehouse', value: `#${session.warehouse_id}` },
+          { label: 'Warehouse', value: warehouseName || `#${session.warehouse_id}` },
           { label: 'Created', value: formatDate(session.created_at) },
           { label: 'Notes', value: session.notes || 'None' },
         ]}
@@ -364,9 +389,15 @@ export function CycleCountDetailPage() {
 }
 
 function CountLineRow({ line, product, location, canEdit, onSave, saving }) {
-  const [counted, setCounted] = useState(line.counted_quantity !== null ? String(line.counted_quantity) : '');
+  const [counted, setCounted] = useState(line.counted_quantity !== null ? String(Number(line.counted_quantity)) : '');
   const [notes, setNotes] = useState(line.notes || '');
-  const dirty = String(line.counted_quantity ?? '') !== counted || (line.notes || '') !== notes;
+
+  useEffect(() => {
+    setCounted(line.counted_quantity !== null ? String(Number(line.counted_quantity)) : '');
+    setNotes(line.notes || '');
+  }, [line.counted_quantity, line.notes]);
+
+  const dirty = Number(counted || Number.NaN) !== Number(line.counted_quantity ?? Number.NaN) || (line.notes || '') !== notes;
 
   return (
     <tr>

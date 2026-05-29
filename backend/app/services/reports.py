@@ -1,4 +1,5 @@
 import csv
+from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from io import StringIO
@@ -7,12 +8,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.domain.inventory.reconciliation import InventoryReconciliation
+from app.models.documents import BillStatus, InvoiceStatus
 from app.models.fulfillment import PickTaskStatus
 from app.models.inventory import InventoryBatchStatus, InventorySerialStatus, MovementType, ReferenceType
 from app.models.master_data import Product, RecordStatus, Warehouse, WarehouseLocation
 from app.models.purchasing import PurchaseOrderStatus, PurchaseReceiptStatus
 from app.models.returns import BlockedReturnStockStatus, SalesReturnStatus
 from app.models.sales import SalesOrderStatus
+from app.models.workflow import WorkflowTaskStatus
 from app.repositories.inventory import InventoryRepository
 from app.repositories.reports import ReportsRepository
 from app.repositories.settings import TenantSettingsRepository
@@ -31,6 +34,343 @@ class ReportsService:
     def _tenant_currency(self, tenant_id: int) -> str:
         settings = self.settings_repository.get_by_tenant(tenant_id)
         return settings.currency if settings and settings.currency else "USD"
+
+    def sales_dashboard(self, tenant_id: int, days: int = 30) -> dict[str, Any]:
+        sales_orders = self.repository.sales_orders(tenant_id)
+        sales_returns = self.repository.sales_returns(tenant_id)
+        invoices = self.repository.invoices(tenant_id)
+        customers = {row.id: row for row in self.repository.customers(tenant_id)}
+        products = self._products(tenant_id)
+        today = date.today()
+        window_start = today - timedelta(days=max(days - 1, 0))
+        month_start = self._month_start(today)
+        previous_month_start = self._month_start(month_start - timedelta(days=1))
+        previous_month_end = month_start - timedelta(days=1)
+
+        revenue_invoices = [invoice for invoice in invoices if invoice.status in {InvoiceStatus.SENT, InvoiceStatus.PAID}]
+        current_month_invoices = [invoice for invoice in revenue_invoices if self._in_date_range(self._invoice_date(invoice), month_start, today)]
+        previous_month_invoices = [
+            invoice for invoice in revenue_invoices if self._in_date_range(self._invoice_date(invoice), previous_month_start, previous_month_end)
+        ]
+        window_invoices = [invoice for invoice in revenue_invoices if self._in_date_range(self._invoice_date(invoice), window_start, today)]
+
+        orders_by_status = self._status_counts(sales_orders, [status.value for status in SalesOrderStatus])
+        revenue_by_day_map = self._seed_decimal_day_map(window_start, today, "revenue")
+        customer_totals: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        customer_orders: dict[int, set[int]] = defaultdict(set)
+        product_revenue: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        product_units: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        for invoice in window_invoices:
+            invoice_day = self._invoice_date(invoice).isoformat()
+            revenue_by_day_map[invoice_day]["revenue"] += invoice.total_amount or ZERO
+            customer_totals[invoice.customer_id] += invoice.total_amount or ZERO
+            if invoice.sales_order_id:
+                customer_orders[invoice.customer_id].add(invoice.sales_order_id)
+            for item in invoice.items:
+                product_revenue[item.product_id] += item.line_total or ZERO
+                product_units[item.product_id] += item.quantity or ZERO
+
+        confirmed_orders = [
+            order for order in sales_orders if order.confirmed_at and self._in_date_range(order.confirmed_at.date(), window_start, today)
+        ]
+        fulfilled_orders = [
+            order for order in confirmed_orders if order.status in {SalesOrderStatus.FULFILLED, SalesOrderStatus.CLOSED}
+        ]
+        fulfilled_window_orders = [
+            order for order in sales_orders if order.fulfilled_at and self._in_date_range(order.fulfilled_at.date(), window_start, today)
+        ]
+        returned_order_ids = {
+            row.sales_order_id for row in sales_returns if row.created_at and self._in_date_range(row.created_at.date(), window_start, today)
+        }
+
+        overdue_invoices = [
+            invoice
+            for invoice in invoices
+            if invoice.status == InvoiceStatus.SENT and invoice.due_date and invoice.due_date < today
+        ]
+
+        top_products = sorted(product_revenue.items(), key=lambda item: item[1], reverse=True)[:5]
+        top_customers = sorted(customer_totals.items(), key=lambda item: item[1], reverse=True)[:5]
+
+        return {
+            "total_revenue_mtd": sum((invoice.total_amount or ZERO for invoice in current_month_invoices), ZERO),
+            "total_revenue_prev_month": sum((invoice.total_amount or ZERO for invoice in previous_month_invoices), ZERO),
+            "orders_by_status": orders_by_status,
+            "revenue_by_day": self._sorted_day_series(revenue_by_day_map, "revenue"),
+            "top_products_by_revenue": [
+                {
+                    "product_name": products[product_id].name,
+                    "sku": products[product_id].sku,
+                    "revenue": revenue,
+                    "units_sold": product_units[product_id],
+                }
+                for product_id, revenue in top_products
+                if product_id in products
+            ],
+            "top_customers_by_revenue": [
+                {
+                    "customer_name": customers[customer_id].name,
+                    "revenue": revenue,
+                    "order_count": len(customer_orders[customer_id]),
+                }
+                for customer_id, revenue in top_customers
+                if customer_id in customers
+            ],
+            "fulfillment_rate": self._ratio_percent(len(fulfilled_orders), len(confirmed_orders)),
+            "return_rate": self._ratio_percent(
+                len({order.id for order in fulfilled_window_orders if order.id in returned_order_ids}),
+                len(fulfilled_window_orders),
+            ),
+            "avg_order_value": self._average_decimal([invoice.total_amount or ZERO for invoice in window_invoices]),
+            "overdue_invoices_count": len(overdue_invoices),
+            "overdue_invoices_value": sum((invoice.total_amount or ZERO for invoice in overdue_invoices), ZERO),
+        }
+
+    def purchase_dashboard(self, tenant_id: int, days: int = 30) -> dict[str, Any]:
+        purchase_orders = self.repository.purchase_orders(tenant_id)
+        purchase_receipts = self.repository.purchase_receipts(tenant_id)
+        bills = self.repository.bills(tenant_id)
+        vendors = {row.id: row for row in self.repository.vendors(tenant_id)}
+        products = self._products(tenant_id)
+        today = date.today()
+        window_start = today - timedelta(days=max(days - 1, 0))
+        month_start = self._month_start(today)
+        previous_month_start = self._month_start(month_start - timedelta(days=1))
+        previous_month_end = month_start - timedelta(days=1)
+
+        spend_bills = [bill for bill in bills if bill.status in {BillStatus.SENT, BillStatus.PAID}]
+        current_month_bills = [bill for bill in spend_bills if self._in_date_range(self._bill_date(bill), month_start, today)]
+        previous_month_bills = [bill for bill in spend_bills if self._in_date_range(self._bill_date(bill), previous_month_start, previous_month_end)]
+        window_bills = [bill for bill in spend_bills if self._in_date_range(self._bill_date(bill), window_start, today)]
+
+        orders_by_status = self._status_counts(purchase_orders, [status.value for status in PurchaseOrderStatus])
+        spend_by_day_map = self._seed_decimal_day_map(window_start, today, "spend")
+        vendor_totals: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        vendor_orders: dict[int, set[int]] = defaultdict(set)
+        product_spend: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        product_units: dict[int, Decimal] = defaultdict(lambda: ZERO)
+        for bill in window_bills:
+            spend_day = self._bill_date(bill).isoformat()
+            spend_by_day_map[spend_day]["spend"] += bill.total_amount or ZERO
+            vendor_totals[bill.vendor_id] += bill.total_amount or ZERO
+            if bill.purchase_order_id:
+                vendor_orders[bill.vendor_id].add(bill.purchase_order_id)
+            for item in bill.items:
+                product_spend[item.product_id] += item.line_total or ZERO
+                product_units[item.product_id] += item.quantity or ZERO
+
+        non_void_receipt_ids_with_bill = {
+            bill.receipt_id for bill in bills if bill.receipt_id is not None and bill.status != BillStatus.VOID
+        }
+        pending_bills_count = len(
+            [
+                receipt
+                for receipt in purchase_receipts
+                if receipt.status == PurchaseReceiptStatus.COMMITTED and receipt.id not in non_void_receipt_ids_with_bill
+            ]
+        )
+        overdue_bills = [bill for bill in bills if bill.status == BillStatus.SENT and bill.due_date and bill.due_date < today]
+        top_vendors = sorted(vendor_totals.items(), key=lambda item: item[1], reverse=True)[:5]
+        top_products = sorted(product_spend.items(), key=lambda item: item[1], reverse=True)[:5]
+
+        return {
+            "total_spend_mtd": sum((bill.total_amount or ZERO for bill in current_month_bills), ZERO),
+            "total_spend_prev_month": sum((bill.total_amount or ZERO for bill in previous_month_bills), ZERO),
+            "orders_by_status": orders_by_status,
+            "spend_by_day": self._sorted_day_series(spend_by_day_map, "spend"),
+            "top_vendors_by_spend": [
+                {
+                    "vendor_name": vendors[vendor_id].name,
+                    "spend": spend,
+                    "order_count": len(vendor_orders[vendor_id]),
+                }
+                for vendor_id, spend in top_vendors
+                if vendor_id in vendors
+            ],
+            "top_products_by_spend": [
+                {
+                    "product_name": products[product_id].name,
+                    "sku": products[product_id].sku,
+                    "spend": spend,
+                    "units_received": product_units[product_id],
+                }
+                for product_id, spend in top_products
+                if product_id in products
+            ],
+            "pending_receipts_count": len(
+                [
+                    order
+                    for order in purchase_orders
+                    if order.status in {PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIALLY_RECEIVED}
+                ]
+            ),
+            "pending_bills_count": pending_bills_count,
+            "overdue_bills_count": len(overdue_bills),
+            "overdue_bills_value": sum((bill.total_amount or ZERO for bill in overdue_bills), ZERO),
+        }
+
+    def inventory_dashboard(self, tenant_id: int, days: int = 30) -> dict[str, Any]:
+        today = date.today()
+        window_start = today - timedelta(days=max(days - 1, 0))
+        recent_movement_start = today - timedelta(days=89)
+        warehouses = self._warehouses(tenant_id)
+        stocks = self.repository.stock(tenant_id)
+        locations = self.repository.locations(tenant_id)
+        ledger_entries = self.repository.ledger(tenant_id, window_start, today)
+        recent_ledger_entries = self.repository.ledger(tenant_id, recent_movement_start, today)
+        active_products = [row for row in self.repository.active_products(tenant_id)]
+        low_stock_rows = self.low_stock(tenant_id)
+        blocked_rows = self.blocked_stock(tenant_id)
+        expiring_rows = [row for row in self.batch_expiry(tenant_id, {"expiry_within_days": 30}) if row["expiry_status"] == "EXPIRING_SOON"]
+
+        products_with_stock = {row.product_id for row in stocks if row.quantity_on_hand > ZERO}
+        moved_product_ids = {row.product_id for row in recent_ledger_entries}
+        dead_stock_count = len([product_id for product_id in products_with_stock if product_id not in moved_product_ids])
+
+        total_sku_count = len(active_products)
+        low_stock_count = len(low_stock_rows)
+        blocked_stock_count = len(blocked_rows)
+        expiring_soon_count = len(expiring_rows)
+        stock_health_score = self._stock_health_score(total_sku_count, low_stock_count, blocked_stock_count, expiring_soon_count, dead_stock_count)
+
+        location_totals: dict[int, int] = defaultdict(int)
+        used_locations: dict[int, set[int]] = defaultdict(set)
+        for location in locations:
+            location_totals[location.warehouse_id] += 1
+        for stock in stocks:
+            if stock.quantity_on_hand > ZERO:
+                used_locations[stock.warehouse_id].add(stock.location_id)
+
+        warehouse_utilization = []
+        for warehouse in warehouses.values():
+            total_locations = location_totals.get(warehouse.id, 0)
+            used_count = len(used_locations.get(warehouse.id, set()))
+            pct = self._ratio_percent(used_count, total_locations) if total_locations else ZERO
+            warehouse_utilization.append(
+                {
+                    "warehouse_name": warehouse.name,
+                    "used_locations": used_count,
+                    "total_locations": total_locations,
+                    "pct": pct,
+                }
+            )
+
+        products = self._products(tenant_id)
+        movement_by_product: dict[int, dict[str, Any]] = defaultdict(lambda: {"movement_count": 0, "net_delta": ZERO})
+        day_map = self._seed_decimal_day_map(window_start, today, "inbound", "outbound")
+        for entry in ledger_entries:
+            movement_by_product[entry.product_id]["movement_count"] += 1
+            movement_by_product[entry.product_id]["net_delta"] += entry.quantity_delta or ZERO
+            entry_day = entry.created_at.date().isoformat()
+            if entry.quantity_delta > ZERO:
+                day_map[entry_day]["inbound"] += entry.quantity_delta
+            elif entry.quantity_delta < ZERO:
+                day_map[entry_day]["outbound"] += abs(entry.quantity_delta)
+
+        movement_velocity = sorted(
+            (
+                {
+                    "product_name": products[product_id].name,
+                    "sku": products[product_id].sku,
+                    "movement_count": stats["movement_count"],
+                    "net_delta": stats["net_delta"],
+                }
+                for product_id, stats in movement_by_product.items()
+                if product_id in products
+            ),
+            key=lambda row: row["movement_count"],
+            reverse=True,
+        )[:10]
+
+        return {
+            "stock_health_score": stock_health_score,
+            "total_sku_count": total_sku_count,
+            "low_stock_count": low_stock_count,
+            "blocked_stock_count": blocked_stock_count,
+            "expiring_soon_count": expiring_soon_count,
+            "dead_stock_count": dead_stock_count,
+            "warehouse_utilization": sorted(warehouse_utilization, key=lambda row: row["warehouse_name"]),
+            "movement_velocity": movement_velocity,
+            "inbound_outbound_by_day": self._sorted_multi_day_series(day_map),
+        }
+
+    def admin_dashboard(self, tenant_id: int, days: int = 30) -> dict[str, Any]:
+        invoices = self.repository.invoices(tenant_id)
+        bills = self.repository.bills(tenant_id)
+        tasks = self.repository.workflow_tasks(tenant_id)
+        sales_orders = self.repository.sales_orders(tenant_id)
+        purchase_orders = self.repository.purchase_orders(tenant_id)
+        sales_returns = self.repository.sales_returns(tenant_id)
+        products = self._products(tenant_id)
+        today = date.today()
+        window_start = today - timedelta(days=max(days - 1, 0))
+        month_start = self._month_start(today)
+
+        revenue_invoices = [
+            invoice
+            for invoice in invoices
+            if invoice.status in {InvoiceStatus.SENT, InvoiceStatus.PAID} and self._in_date_range(self._invoice_date(invoice), month_start, today)
+        ]
+        spend_bills = [
+            bill for bill in bills if bill.status in {BillStatus.SENT, BillStatus.PAID} and self._in_date_range(self._bill_date(bill), month_start, today)
+        ]
+        open_tasks_by_role: dict[str, int] = defaultdict(int)
+        for task in tasks:
+            if task.status in {WorkflowTaskStatus.OPEN.value, WorkflowTaskStatus.IN_PROGRESS.value}:
+                open_tasks_by_role[task.assigned_role] += 1
+
+        gross_margin = ZERO
+        for invoice in revenue_invoices:
+            for item in invoice.items:
+                cost_price = products.get(item.product_id).cost_price if products.get(item.product_id) else ZERO
+                gross_margin += (item.line_total or ZERO) - ((item.quantity or ZERO) * (cost_price or ZERO))
+
+        overdue_invoice_count = len(
+            [invoice for invoice in invoices if invoice.status == InvoiceStatus.SENT and invoice.due_date and invoice.due_date < today]
+        )
+        overdue_bill_count = len(
+            [bill for bill in bills if bill.status == BillStatus.SENT and bill.due_date and bill.due_date < today]
+        )
+        returns_pending_qc = len(
+            [row for row in sales_returns if row.status in {SalesReturnStatus.SUBMITTED, SalesReturnStatus.INSPECTION_PENDING}]
+        )
+        inventory_summary = self.inventory_summary(tenant_id)
+
+        revenue_window = {
+            self._invoice_date(invoice).isoformat(): revenue
+            for invoice, revenue in ((invoice, invoice.total_amount or ZERO) for invoice in invoices if invoice.status in {InvoiceStatus.SENT, InvoiceStatus.PAID} and self._in_date_range(self._invoice_date(invoice), window_start, today))
+        }
+        spend_window = {
+            self._bill_date(bill).isoformat(): spend
+            for bill, spend in ((bill, bill.total_amount or ZERO) for bill in bills if bill.status in {BillStatus.SENT, BillStatus.PAID} and self._in_date_range(self._bill_date(bill), window_start, today))
+        }
+        activity_map = self._seed_decimal_day_map(window_start, today, "revenue", "spend")
+        for invoice in invoices:
+            if invoice.status in {InvoiceStatus.SENT, InvoiceStatus.PAID} and self._in_date_range(self._invoice_date(invoice), window_start, today):
+                activity_map[self._invoice_date(invoice).isoformat()]["revenue"] += invoice.total_amount or ZERO
+        for bill in bills:
+            if bill.status in {BillStatus.SENT, BillStatus.PAID} and self._in_date_range(self._bill_date(bill), window_start, today):
+                activity_map[self._bill_date(bill).isoformat()]["spend"] += bill.total_amount or ZERO
+
+        return {
+            "revenue_mtd": sum((invoice.total_amount or ZERO for invoice in revenue_invoices), ZERO),
+            "spend_mtd": sum((bill.total_amount or ZERO for bill in spend_bills), ZERO),
+            "gross_margin_mtd": gross_margin,
+            "open_tasks_by_role": dict(open_tasks_by_role),
+            "order_health": {
+                "open_so": len([order for order in sales_orders if order.status in {SalesOrderStatus.DRAFT, SalesOrderStatus.CONFIRMED, SalesOrderStatus.PARTIALLY_FULFILLED}]),
+                "open_po": len([order for order in purchase_orders if order.status in {PurchaseOrderStatus.DRAFT, PurchaseOrderStatus.SUBMITTED, PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIALLY_RECEIVED}]),
+                "overdue_invoices": overdue_invoice_count,
+                "overdue_bills": overdue_bill_count,
+                "returns_pending_qc": returns_pending_qc,
+            },
+            "stock_health": {
+                "low_stock": inventory_summary["low_stock_count"],
+                "blocked": inventory_summary["damaged_blocked_qc_count"],
+                "expiring_30d": inventory_summary["expiring_soon_batch_count"],
+            },
+            "activity_by_day": self._sorted_multi_day_series(activity_map),
+        }
 
     def inventory_summary(self, tenant_id: int) -> dict[str, Any]:
         products = self.repository.products(tenant_id)
@@ -452,6 +792,65 @@ class ReportsService:
 
     def _products(self, tenant_id: int) -> dict[int, Product]:
         return {row.id: row for row in self.repository.products(tenant_id)}
+
+    def _month_start(self, value: date) -> date:
+        return value.replace(day=1)
+
+    def _invoice_date(self, invoice: Any) -> date:
+        return invoice.sent_at.date() if invoice.sent_at else invoice.issue_date
+
+    def _bill_date(self, bill: Any) -> date:
+        return bill.created_at.date() if bill.created_at else bill.issue_date
+
+    def _in_date_range(self, value: date, start: date, end: date) -> bool:
+        return start <= value <= end
+
+    def _status_counts(self, rows: list[Any], statuses: list[str]) -> dict[str, int]:
+        counts = {status: 0 for status in statuses}
+        for row in rows:
+            status = row.status.value if hasattr(row.status, "value") else str(row.status)
+            counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    def _ratio_percent(self, numerator: int | Decimal, denominator: int | Decimal) -> Decimal:
+        if not denominator:
+            return ZERO
+        numerator_value = Decimal(str(numerator))
+        denominator_value = Decimal(str(denominator))
+        return ((numerator_value / denominator_value) * Decimal("100")).quantize(Decimal("0.01"))
+
+    def _average_decimal(self, values: list[Decimal]) -> Decimal:
+        if not values:
+            return ZERO
+        return (sum(values, ZERO) / Decimal(str(len(values)))).quantize(Decimal("0.01"))
+
+    def _seed_decimal_day_map(self, start: date, end: date, *keys: str) -> dict[str, dict[str, Decimal]]:
+        result: dict[str, dict[str, Decimal]] = {}
+        cursor = start
+        while cursor <= end:
+            result[cursor.isoformat()] = {key: ZERO for key in keys}
+            cursor += timedelta(days=1)
+        return result
+
+    def _sorted_day_series(self, day_map: dict[str, dict[str, Decimal]], key: str) -> list[dict[str, Any]]:
+        return [{"date": day, key: values[key]} for day, values in sorted(day_map.items())]
+
+    def _sorted_multi_day_series(self, day_map: dict[str, dict[str, Decimal]]) -> list[dict[str, Any]]:
+        return [{"date": day, **values} for day, values in sorted(day_map.items())]
+
+    def _stock_health_score(
+        self,
+        total_sku_count: int,
+        low_stock_count: int,
+        blocked_stock_count: int,
+        expiring_soon_count: int,
+        dead_stock_count: int,
+    ) -> int:
+        if total_sku_count <= 0:
+            return 100
+        weighted_issues = low_stock_count + (blocked_stock_count * 2) + expiring_soon_count + dead_stock_count
+        ratio = min(Decimal("1"), Decimal(str(weighted_issues)) / Decimal(str(total_sku_count)))
+        return max(0, 100 - int(ratio * Decimal("100")))
 
     def _warehouses(self, tenant_id: int) -> dict[int, Warehouse]:
         return {row.id: row for row in self.repository.warehouses(tenant_id)}

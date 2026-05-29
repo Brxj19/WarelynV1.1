@@ -212,6 +212,117 @@ class DashboardInsight(BaseModel):
     action_url: str | None = None
 
 
+class RevenueByDayPoint(BaseModel):
+    date: str
+    revenue: Decimal
+
+
+class SpendByDayPoint(BaseModel):
+    date: str
+    spend: Decimal
+
+
+class RevenueTopProduct(BaseModel):
+    product_name: str
+    sku: str
+    revenue: Decimal
+    units_sold: Decimal
+
+
+class RevenueTopCustomer(BaseModel):
+    customer_name: str
+    revenue: Decimal
+    order_count: int
+
+
+class SpendTopVendor(BaseModel):
+    vendor_name: str
+    spend: Decimal
+    order_count: int
+
+
+class SpendTopProduct(BaseModel):
+    product_name: str
+    sku: str
+    spend: Decimal
+    units_received: Decimal
+
+
+class WarehouseUtilizationRow(BaseModel):
+    warehouse_name: str
+    used_locations: int
+    total_locations: int
+    pct: Decimal
+
+
+class MovementVelocityRow(BaseModel):
+    product_name: str
+    sku: str
+    movement_count: int
+    net_delta: Decimal
+
+
+class InboundOutboundDay(BaseModel):
+    date: str
+    inbound: Decimal
+    outbound: Decimal
+
+
+class RevenueSpendDay(BaseModel):
+    date: str
+    revenue: Decimal
+    spend: Decimal
+
+
+class SalesDashboard(BaseModel):
+    total_revenue_mtd: Decimal
+    total_revenue_prev_month: Decimal
+    orders_by_status: dict[str, int]
+    revenue_by_day: list[RevenueByDayPoint]
+    top_products_by_revenue: list[RevenueTopProduct]
+    top_customers_by_revenue: list[RevenueTopCustomer]
+    fulfillment_rate: Decimal
+    return_rate: Decimal
+    avg_order_value: Decimal
+    overdue_invoices_count: int
+    overdue_invoices_value: Decimal
+
+
+class PurchaseDashboard(BaseModel):
+    total_spend_mtd: Decimal
+    total_spend_prev_month: Decimal
+    orders_by_status: dict[str, int]
+    spend_by_day: list[SpendByDayPoint]
+    top_vendors_by_spend: list[SpendTopVendor]
+    top_products_by_spend: list[SpendTopProduct]
+    pending_receipts_count: int
+    pending_bills_count: int
+    overdue_bills_count: int
+    overdue_bills_value: Decimal
+
+
+class InventoryDashboard(BaseModel):
+    stock_health_score: int
+    total_sku_count: int
+    low_stock_count: int
+    blocked_stock_count: int
+    expiring_soon_count: int
+    dead_stock_count: int
+    warehouse_utilization: list[WarehouseUtilizationRow]
+    movement_velocity: list[MovementVelocityRow]
+    inbound_outbound_by_day: list[InboundOutboundDay]
+
+
+class AdminDashboard(BaseModel):
+    revenue_mtd: Decimal
+    spend_mtd: Decimal
+    gross_margin_mtd: Decimal
+    open_tasks_by_role: dict[str, int]
+    order_health: dict[str, int]
+    stock_health: dict[str, int]
+    activity_by_day: list[RevenueSpendDay]
+
+
 class OperationalDashboard(BaseModel):
     kpis: InventorySummaryReport
     previous_kpis: InventorySummaryReport | None = None

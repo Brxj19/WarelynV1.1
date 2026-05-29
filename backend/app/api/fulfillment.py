@@ -45,7 +45,7 @@ def start_pick_task(pick_task_id: int, context: UserContext = Depends(require_ro
 
 @router.post("/pick-tasks/{pick_task_id}/pick", response_model=PickTaskRead)
 def pick_pick_task(pick_task_id: int, request: PickTaskPickRequest, context: UserContext = Depends(require_roles(*writer_roles)), db: Session = Depends(get_db)) -> PickTaskRead:
-    return FulfillmentService(db).pick_pick_task(context.tenant_id, pick_task_id, request.model_dump())
+    return FulfillmentService(db).pick_pick_task(context.tenant_id, context.user.id, pick_task_id, request.model_dump())
 
 
 @router.post("/pick-tasks/{pick_task_id}/cancel", response_model=PickTaskRead)
@@ -56,6 +56,11 @@ def cancel_pick_task(pick_task_id: int, context: UserContext = Depends(require_r
 @router.post("/sales-orders/{order_id}/packages", response_model=PackageRead, status_code=status.HTTP_201_CREATED)
 def create_package(order_id: int, request: PackageCreate, context: UserContext = Depends(require_roles(*writer_roles)), db: Session = Depends(get_db)) -> PackageRead:
     return FulfillmentService(db).create_package(context.tenant_id, order_id, request.model_dump())
+
+
+@router.get("/packages", response_model=list[PackageRead])
+def list_all_packages(context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)) -> list[PackageRead]:
+    return FulfillmentService(db).list_all_packages(context.tenant_id)
 
 
 @router.get("/sales-orders/{order_id}/packages", response_model=list[PackageRead])

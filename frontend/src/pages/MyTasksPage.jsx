@@ -1,6 +1,6 @@
-import { CheckCircle2, Clock, ExternalLink, Inbox } from 'lucide-react';
+import { CheckCircle2, Clock, ExternalLink, Inbox, PlayCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { Button } from '../components/ui/Button.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
@@ -33,11 +33,13 @@ function isOverdue(dueAt) {
 
 export function MyTasksPage() {
   const { accessToken } = useAuth();
+  const [searchParams] = useSearchParams();
   const [tasks, setTasks] = useState([]);
   const [activeTab, setActiveTab] = useState('OPEN');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyIds, setBusyIds] = useState(new Set());
+  const roleFilter = searchParams.get('role');
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -66,6 +68,23 @@ export function MyTasksPage() {
     }
   }
 
+  async function handleStart(taskId) {
+    setBusyIds((prev) => new Set([...prev, taskId]));
+    try {
+      await workflowService.startTask(accessToken, taskId);
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusyIds((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
+    }
+  }
+
+  const displayedTasks = useMemo(() => {
+    if (!roleFilter) return tasks;
+    return tasks.filter((task) => task.assigned_role === roleFilter);
+  }, [roleFilter, tasks]);
+
   return (
     <div className="space-y-6">
       <PageHeader kicker="Workflow" title="My Tasks" description="Tasks assigned to your role or directly to you." />
@@ -86,7 +105,7 @@ export function MyTasksPage() {
       {error && <ErrorState description={error} />}
       {isLoading && <LoadingState />}
 
-      {!isLoading && !error && tasks.length === 0 && (
+      {!isLoading && !error && displayedTasks.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <img alt="" className="mb-4 h-32 w-32 opacity-60" src={emptyStateIllustrations.overview} />
           <h3 className="text-lg font-semibold text-warelyn-text">No tasks found</h3>
@@ -96,9 +115,9 @@ export function MyTasksPage() {
         </div>
       )}
 
-      {!isLoading && tasks.length > 0 && (
+      {!isLoading && displayedTasks.length > 0 && (
         <div className="space-y-3">
-          {tasks.map((task) => (
+          {displayedTasks.map((task) => (
             <div className="flex items-start gap-4 rounded-xl border border-warelyn-border bg-white p-4 shadow-sm transition-shadow hover:shadow-md" key={task.id}>
               <div className="mt-0.5 shrink-0">
                 {task.status === 'COMPLETED' ? (
@@ -132,6 +151,11 @@ export function MyTasksPage() {
                   <Link to={task.action_url}>
                     <Button size="sm" variant="secondary"><ExternalLink size={14} /> View</Button>
                   </Link>
+                )}
+                {task.status === 'OPEN' && (
+                  <Button disabled={busyIds.has(task.id)} onClick={() => handleStart(task.id)} size="sm" variant="secondary">
+                    <PlayCircle size={14} /> Start
+                  </Button>
                 )}
                 {(task.status === 'OPEN' || task.status === 'IN_PROGRESS') && (
                   <Button disabled={busyIds.has(task.id)} onClick={() => handleComplete(task.id)} size="sm" variant="accent">

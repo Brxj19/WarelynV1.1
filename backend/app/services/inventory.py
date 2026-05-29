@@ -49,6 +49,9 @@ class InventoryService:
     def list_ledger(self, tenant_id: int) -> list[StockLedgerEntry]:
         return self.repository.list_ledger(tenant_id)
 
+    def list_reservations(self, tenant_id: int):
+        return self.repository.list_reservations(tenant_id)
+
     def list_batches(self, tenant_id: int) -> list[InventoryBatch]:
         return self.repository.list_batches(tenant_id)
 

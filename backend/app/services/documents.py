@@ -551,6 +551,9 @@ class DocumentsService:
         try:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "BILL_RECORDED", "bill", bill.id, actor_user_id, {"bill_number": bill.bill_number, "purchase_order_id": po.id})
+            workflow.complete_entity_step(
+                tenant_id, "purchase_order", po.id, "RECORD_BILL", actor_user_id
+            )
             workflow.cancel_entity_tasks(tenant_id, "purchase_order", po.id)
             self.db.commit()
         except Exception:
@@ -583,6 +586,9 @@ class DocumentsService:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "INVOICE_SENT", "invoice", invoice.id, actor_user_id, {"invoice_number": invoice.invoice_number, "sales_order_id": invoice.sales_order_id})
             if invoice.sales_order_id:
+                workflow.complete_entity_step(
+                    tenant_id, "sales_order", invoice.sales_order_id, "CREATE_INVOICE", actor_user_id
+                )
                 workflow.cancel_entity_tasks(tenant_id, "sales_order", invoice.sales_order_id)
             self.db.commit()
         except Exception:

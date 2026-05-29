@@ -74,6 +74,9 @@ class FulfillmentRepository:
     def picked_quantity_for_item(self, tenant_id: int, pick_task_item_id: int) -> float:
         return self.db.scalar(select(func.coalesce(func.sum(PackageItem.quantity), 0)).join(Package, Package.id == PackageItem.package_id).where(PackageItem.tenant_id == tenant_id, PackageItem.pick_task_item_id == pick_task_item_id, Package.status != PackageStatus.CANCELLED)) or 0
 
+    def list_all_packages(self, tenant_id: int) -> list[Package]:
+        return list(self.db.scalars(select(Package).where(Package.tenant_id == tenant_id).options(selectinload(Package.items)).order_by(Package.created_at.desc(), Package.id.desc())))
+
     def list_packages_for_order(self, tenant_id: int, order_id: int) -> list[Package]:
         return list(self.db.scalars(select(Package).where(Package.tenant_id == tenant_id, Package.sales_order_id == order_id).options(selectinload(Package.items)).order_by(Package.created_at.desc(), Package.id.desc())))
 

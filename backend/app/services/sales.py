@@ -27,6 +27,9 @@ class SalesService:
     def list_sales_orders(self, tenant_id: int) -> list[SalesOrder]:
         return self.repository.list_sales_orders(tenant_id)
 
+    def list_all_fulfillments(self, tenant_id: int) -> list[SalesFulfillment]:
+        return self.repository.list_all_fulfillments(tenant_id)
+
     def get_sales_order(self, tenant_id: int, order_id: int) -> SalesOrder:
         order = self.repository.get_sales_order(tenant_id, order_id)
         if order is None:
@@ -365,8 +368,8 @@ class SalesService:
         return self.get_sales_order(tenant_id, order.id)
 
     def _update_sales_order_fulfillment_status(self, order: SalesOrder) -> None:
-        items = [self.repository.lock_sales_order_item(order.tenant_id, item.id) for item in self.get_sales_order(order.tenant_id, order.id).items]
-        if all(item and item.fulfilled_quantity >= item.ordered_quantity for item in items):
+        items = order.items
+        if all(item.fulfilled_quantity >= item.ordered_quantity for item in items):
             order.status = SalesOrderStatus.FULFILLED
             order.fulfilled_at = datetime.now(UTC)
         else:

@@ -7,8 +7,18 @@ from sqlalchemy.orm import Session
 from app.models.auth import UserRole
 from app.models.inventory import InventorySerial, StockLedgerEntry, WarehouseStock
 from app.models.returns import BlockedReturnStock
+from test_purchasing import approve_po, create_po, create_receipt, setup_purchase_dimension, submit_po
 from test_returns import create_return, fulfilled_order, inspect_and_process
-from test_sales import auth_headers, create_role_user, register_and_login, setup_sales_dimension, stock_in
+from test_sales import (
+    auth_headers,
+    confirm_sales_order,
+    create_fulfillment,
+    create_role_user,
+    create_sales_order,
+    register_and_login,
+    setup_sales_dimension,
+    stock_in,
+)
 
 
 def stock_out(client: TestClient, token: str, dimension: dict[str, int], quantity: str, key: str) -> None:
@@ -234,3 +244,99 @@ def test_dashboard_charts_and_insights(client: TestClient) -> None:
     assert len(low_stock_insights) == 0
     # previous_kpis should be None when no historical ledger data exists for previous period
     assert data["previous_kpis"] is None
+
+
+def test_sales_and_admin_dashboard_endpoints(client: TestClient, db_session: Session, monkeypatch) -> None:
+    monkeypatch.setattr("app.services.documents.send_email", lambda *args, **kwargs: None)
+    login = register_and_login(client, "dashboard-sales-admin@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(
+        client,
+        token,
+        "DASH-SALES",
+        {"name": "Dashboard Sales", "sku": "DASH-SALES", "cost_price": "4.00", "selling_price": "10.00"},
+    )
+    stock_in(client, token, dimension, "6", "dash-sales-stock")
+    order = create_sales_order(client, token, dimension, "3", "SO-DASH-SALES")
+    confirmed = confirm_sales_order(client, token, order, dimension, "3", "dash-sales-confirm")
+    reservation_id = confirmed["stock_results"][0]["reservation"]["id"]
+    fulfillment = create_fulfillment(client, token, order, dimension, reservation_id, "3", "FUL-DASH-SALES")
+    committed = client.post(
+        f"/api/sales-fulfillments/{fulfillment['id']}/commit",
+        json={"idempotency_key": "dash-sales-commit"},
+        headers=auth_headers(token),
+    )
+    invoice_order = create_sales_order(client, token, dimension, "3", "SO-DASH-INVOICE")
+    invoice = client.post("/api/invoices", json={"sales_order_id": invoice_order["id"]}, headers=auth_headers(token))
+    sent = client.post(
+        f"/api/invoices/{invoice.json()['id']}/send",
+        json={"email": "customer@example.com"},
+        headers=auth_headers(token),
+    )
+    sales_staff_token = create_role_user(client, db_session, UserRole.SALES_STAFF, "dash-sales-staff@example.com")
+    inventory_token = create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "dash-sales-inventory@example.com")
+
+    sales_dashboard = client.get("/api/dashboard/sales?days=30", headers=auth_headers(token))
+    admin_dashboard = client.get("/api/dashboard/admin?days=30", headers=auth_headers(token))
+    sales_staff_dashboard = client.get("/api/dashboard/sales?days=30", headers=auth_headers(sales_staff_token))
+    inventory_forbidden = client.get("/api/dashboard/sales?days=30", headers=auth_headers(inventory_token))
+    sales_staff_admin_forbidden = client.get("/api/dashboard/admin?days=30", headers=auth_headers(sales_staff_token))
+
+    assert committed.status_code == 200
+    assert invoice.status_code == 201
+    assert sent.status_code == 200
+    assert sales_dashboard.status_code == 200
+    assert sales_dashboard.json()["total_revenue_mtd"] == "29.97"
+    assert sales_dashboard.json()["overdue_invoices_count"] == 0
+    assert sales_dashboard.json()["top_products_by_revenue"][0]["sku"] == "DASH-SALES"
+    assert admin_dashboard.status_code == 200
+    assert admin_dashboard.json()["revenue_mtd"] == "29.97"
+    assert admin_dashboard.json()["order_health"]["open_so"] >= 0
+    assert admin_dashboard.json()["stock_health"]["low_stock"] >= 0
+    assert sales_staff_dashboard.status_code == 200
+    assert inventory_forbidden.status_code == 403
+    assert sales_staff_admin_forbidden.status_code == 403
+
+
+def test_purchase_and_inventory_dashboard_endpoints(client: TestClient, db_session: Session, monkeypatch) -> None:
+    monkeypatch.setattr("app.services.documents.send_email", lambda *args, **kwargs: None)
+    login = register_and_login(client, "dashboard-purchase-admin@example.com")
+    token = login["access_token"]
+    create_report_fixture(client, token, "INV-DASH")
+    dimension = setup_purchase_dimension(client, token, "DASH-PURCHASE")
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "5", "PO-DASH")["id"])["id"])
+    receipt = create_receipt(client, token, po, dimension, "5", "GRN-DASH")
+    committed = client.post(
+        f"/api/purchase-receipts/{receipt['id']}/commit",
+        json={"idempotency_key": "dash-receipt-commit"},
+        headers=auth_headers(token),
+    )
+    bill = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=auth_headers(token))
+    sent = client.post(
+        f"/api/bills/{bill.json()['id']}/send",
+        json={"email": "vendor@example.com"},
+        headers=auth_headers(token),
+    )
+    purchase_token = create_role_user(client, db_session, UserRole.PURCHASE_STAFF, "dash-purchase-staff@example.com")
+    inventory_token = create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "dash-purchase-inventory@example.com")
+    viewer_token = create_role_user(client, db_session, UserRole.VIEWER, "dash-purchase-viewer@example.com")
+
+    purchase_dashboard = client.get("/api/dashboard/purchasing?days=30", headers=auth_headers(token))
+    purchase_staff_dashboard = client.get("/api/dashboard/purchasing?days=30", headers=auth_headers(purchase_token))
+    inventory_dashboard = client.get("/api/dashboard/inventory?days=30", headers=auth_headers(inventory_token))
+    viewer_purchase_forbidden = client.get("/api/dashboard/purchasing?days=30", headers=auth_headers(viewer_token))
+    viewer_inventory_forbidden = client.get("/api/dashboard/inventory?days=30", headers=auth_headers(viewer_token))
+
+    assert committed.status_code == 200
+    assert bill.status_code == 201
+    assert sent.status_code == 200
+    assert purchase_dashboard.status_code == 200
+    assert purchase_dashboard.json()["total_spend_mtd"] == "22.50"
+    assert purchase_dashboard.json()["pending_bills_count"] == 0
+    assert purchase_dashboard.json()["top_vendors_by_spend"][0]["vendor_name"].startswith("Vendor")
+    assert purchase_staff_dashboard.status_code == 200
+    assert inventory_dashboard.status_code == 200
+    assert inventory_dashboard.json()["low_stock_count"] >= 1
+    assert len(inventory_dashboard.json()["warehouse_utilization"]) >= 1
+    assert viewer_purchase_forbidden.status_code == 403
+    assert viewer_inventory_forbidden.status_code == 403

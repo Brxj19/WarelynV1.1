@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -91,11 +91,15 @@ class StockCountSession(Base):
     reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    lines: Mapped[list["StockCountLine"]] = relationship("StockCountLine", cascade="all, delete-orphan", lazy="selectin")
 
 
 class StockCountLine(Base):
     __tablename__ = "stock_count_lines"
-    __table_args__ = (Index("ix_stock_count_lines_session", "session_id"),)
+    __table_args__ = (
+        Index("ix_stock_count_lines_session", "session_id"),
+        UniqueConstraint("tenant_id", "session_id", "product_id", "location_id", name="uq_stock_count_lines_session_product_location"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)

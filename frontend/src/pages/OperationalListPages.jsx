@@ -377,27 +377,21 @@ export function PackagesPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [orders, customerRows] = await Promise.all([
+        const [orders, customerRows, packageRows] = await Promise.all([
           salesService.listSalesOrders(accessToken),
           catalogService.listCustomers(accessToken),
+          fulfillmentService.listAllPackages(accessToken),
         ]);
+        const ordersById = Object.fromEntries(orders.map((row) => [row.id, row]));
         const customerMap = Object.fromEntries(customerRows.map((row) => [row.id, row]));
-        const packageGroups = await Promise.all(
-          orders.map(async (order) => ({
-            order,
-            packages: await fulfillmentService.listPackagesForOrder(accessToken, order.id),
-          })),
-        );
-        setSalesOrdersById(Object.fromEntries(orders.map((row) => [row.id, row])));
+        setSalesOrdersById(ordersById);
         setCustomersById(customerMap);
         setPackages(
-          packageGroups.flatMap(({ order, packages: orderPackages }) =>
-            orderPackages.map((pkg) => ({
-              ...pkg,
-              order_number: order.order_number,
-              customer_name: customerMap[order.customer_id]?.name ?? '',
-            })),
-          ),
+          packageRows.map((pkg) => ({
+            ...pkg,
+            order_number: ordersById[pkg.sales_order_id]?.order_number ?? `#${pkg.sales_order_id}`,
+            customer_name: customerMap[ordersById[pkg.sales_order_id]?.customer_id]?.name ?? '',
+          })),
         );
       } catch (loadError) {
         setError(loadError.message);
@@ -556,25 +550,19 @@ export function SalesFulfillmentsPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [orders, customerRows] = await Promise.all([
+        const [orders, customerRows, fulfillmentRows] = await Promise.all([
           salesService.listSalesOrders(accessToken),
           catalogService.listCustomers(accessToken),
+          salesService.listAllSalesFulfillments(accessToken),
         ]);
-        const fulfillmentGroups = await Promise.all(
-          orders.map(async (order) => ({
-            order,
-            fulfillments: await salesService.listSalesFulfillments(accessToken, order.id),
-          })),
-        );
-        setSalesOrdersById(Object.fromEntries(orders.map((row) => [row.id, row])));
+        const ordersById = Object.fromEntries(orders.map((row) => [row.id, row]));
+        setSalesOrdersById(ordersById);
         setCustomersById(Object.fromEntries(customerRows.map((row) => [row.id, row])));
         setFulfillments(
-          fulfillmentGroups.flatMap(({ order, fulfillments: orderFulfillments }) =>
-            orderFulfillments.map((fulfillment) => ({
-              ...fulfillment,
-              order_number: order.order_number,
-            })),
-          ),
+          fulfillmentRows.map((fulfillment) => ({
+            ...fulfillment,
+            order_number: ordersById[fulfillment.sales_order_id]?.order_number ?? `#${fulfillment.sales_order_id}`,
+          })),
         );
       } catch (loadError) {
         setError(loadError.message);

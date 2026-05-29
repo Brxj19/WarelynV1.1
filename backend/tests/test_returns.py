@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.models.auth import UserRole
 from app.models.inventory import InventorySerial, InventorySerialStatus, MovementType, StockLedgerEntry, WarehouseStock
-from app.models.returns import BlockedReturnStock, SalesReturn, SalesReturnStatus
+from app.models.returns import BlockedReturnStock, ReturnQCInspection, SalesReturn, SalesReturnStatus
+from app.models.workflow import WorkflowEvent
 from test_sales import auth_headers, confirm_sales_order, create_fulfillment, create_role_user, create_sales_order, register_and_login, setup_sales_dimension, stock_in
 
 
@@ -176,3 +177,91 @@ def test_return_roles_and_tenant_isolation(client: TestClient, db_session: Sessi
     assert sales_inspect.status_code == 403
     assert cross_tenant.status_code == 404
     assert db_session.query(SalesReturn).one().status == SalesReturnStatus.SUBMITTED
+
+
+def test_sales_staff_cannot_inspect_return(client: TestClient, db_session: Session) -> None:
+    login = register_and_login(client, "return-rbac@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "RR")
+    stock_in(client, token, dimension, "3", "return-rbac-in")
+    order = fulfilled_order(client, token, dimension, "1", "SO-RR", "FUL-RR")
+    sales_return = create_return(client, token, order, dimension, "1", "RET-RR")
+    submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=auth_headers(token))
+    assert submitted.status_code == 200
+
+    sales_token = create_role_user(client, db_session, UserRole.SALES_STAFF, "return-rbac-sales@example.com")
+    inspect = client.post(
+        f"/api/sales-returns/{sales_return['id']}/inspect",
+        json={"items": [{"sales_return_item_id": submitted.json()["items"][0]["id"], "qc_status": "ACCEPTED_RESTOCK", "accepted_quantity": "1", "rejected_quantity": "0"}]},
+        headers=auth_headers(sales_token),
+    )
+
+    assert inspect.status_code == 403
+
+
+def test_inspect_return_twice_creates_only_one_inspection_record(client: TestClient, db_session: Session) -> None:
+    login = register_and_login(client, "return-inspection@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "RI")
+    stock_in(client, token, dimension, "3", "return-inspection-in")
+    order = fulfilled_order(client, token, dimension, "1", "SO-RI", "FUL-RI")
+    sales_return = create_return(client, token, order, dimension, "1", "RET-RI")
+    submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=auth_headers(token))
+    assert submitted.status_code == 200
+    payload = {"items": [{"sales_return_item_id": submitted.json()["items"][0]["id"], "qc_status": "ACCEPTED_RESTOCK", "accepted_quantity": "1", "rejected_quantity": "0"}]}
+
+    first = client.post(f"/api/sales-returns/{sales_return['id']}/inspect", json=payload, headers=auth_headers(token))
+    second = client.post(f"/api/sales-returns/{sales_return['id']}/inspect", json=payload, headers=auth_headers(token))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert db_session.query(ReturnQCInspection).filter(ReturnQCInspection.sales_return_id == sales_return["id"]).count() == 1
+
+
+def test_submit_return_workflow_event_has_actor_user_id(client: TestClient, db_session: Session) -> None:
+    login = register_and_login(client, "return-workflow@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "RW")
+    stock_in(client, token, dimension, "3", "return-workflow-in")
+    order = fulfilled_order(client, token, dimension, "1", "SO-RW", "FUL-RW")
+    sales_return = create_return(client, token, order, dimension, "1", "RET-RW")
+
+    submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=auth_headers(token))
+    assert submitted.status_code == 200
+
+    event = db_session.query(WorkflowEvent).filter(
+        WorkflowEvent.entity_type == "sales_return",
+        WorkflowEvent.entity_id == sales_return["id"],
+        WorkflowEvent.event_type == "RETURN_SUBMITTED",
+    ).one()
+    assert event.actor_user_id is not None
+
+
+def test_process_return_succeeds_after_inspection_pending_state(client: TestClient, db_session: Session) -> None:
+    login = register_and_login(client, "return-process@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "RP")
+    stock_in(client, token, dimension, "5", "return-process-in")
+    order = fulfilled_order(client, token, dimension, "2", "SO-RP", "FUL-RP")
+    sales_return = create_return(client, token, order, dimension, "1", "RET-RP")
+    submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=auth_headers(token))
+    assert submitted.status_code == 200
+
+    inspect = client.post(
+        f"/api/sales-returns/{sales_return['id']}/inspect",
+        json={"items": [{"sales_return_item_id": submitted.json()["items"][0]["id"], "qc_status": "ACCEPTED_RESTOCK", "accepted_quantity": "1", "rejected_quantity": "0"}]},
+        headers=auth_headers(token),
+    )
+    assert inspect.status_code == 200
+    assert inspect.json()["status"] == "INSPECTION_PENDING"
+
+    process = client.post(
+        f"/api/sales-returns/{sales_return['id']}/process",
+        json={"idempotency_key": "return-process-happy"},
+        headers=auth_headers(token),
+    )
+
+    assert process.status_code == 200
+    assert process.json()["sales_return"]["status"] == "PROCESSED"
+    stock = db_session.query(WarehouseStock).one()
+    assert stock.quantity_on_hand == Decimal("4.000")

@@ -63,7 +63,7 @@ class ReturnsService:
         self.db.commit()
         return self.get_return(tenant_id, return_id)
 
-    def submit_return(self, tenant_id: int, return_id: int) -> SalesReturn:
+    def submit_return(self, tenant_id: int, actor_id: int, return_id: int) -> SalesReturn:
         sales_return = self.repository.lock_return(tenant_id, return_id)
         if sales_return is None:
             raise AppError("SALES_RETURN_NOT_FOUND", "Sales return was not found for this tenant.", 404)
@@ -78,7 +78,7 @@ class ReturnsService:
         self.db.commit()
         try:
             workflow = WorkflowService(self.db)
-            workflow.log_event(tenant_id, "RETURN_SUBMITTED", "sales_return", return_id, None, {"return_number": sales_return.return_number if hasattr(sales_return, 'return_number') else str(return_id)})
+            workflow.log_event(tenant_id, "RETURN_SUBMITTED", "sales_return", return_id, actor_id, {"return_number": sales_return.return_number})
             workflow.create_task(tenant_id, WorkflowTaskCreate(
                 workflow_type="RETURNS",
                 entity_type="sales_return",
@@ -89,7 +89,7 @@ class ReturnsService:
                 assigned_role="INVENTORY_MANAGER",
                 priority="NORMAL",
                 action_url=f"/returns/{return_id}",
-            ))
+            ), created_by=actor_id)
             self.db.commit()
         except Exception:
             pass
@@ -127,7 +127,9 @@ class ReturnsService:
         now = datetime.now(UTC)
         sales_return.status = SalesReturnStatus.INSPECTION_PENDING
         sales_return.inspected_at = now
-        self.repository.create_inspection({"tenant_id": tenant_id, "sales_return_id": return_id, "inspected_by": actor_id, "inspected_at": now, "notes": values.get("notes")})
+        existing = self.repository.get_latest_inspection(tenant_id, return_id)
+        if existing is None:
+            self.repository.create_inspection({"tenant_id": tenant_id, "sales_return_id": return_id, "inspected_by": actor_id, "inspected_at": now, "notes": values.get("notes")})
         self.db.commit()
         return self.get_return(tenant_id, return_id)
 
@@ -157,6 +159,12 @@ class ReturnsService:
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("SALES_RETURN_PROCESS_FAILED", "Sales return processing failed because of duplicate or invalid data.", 409) from exc
+        try:
+            WorkflowService(self.db).complete_entity_step(
+                tenant_id, "sales_return", return_id, "RETURN_QC", actor_id
+            )
+        except Exception:
+            pass
         return {"sales_return": self.get_return(tenant_id, return_id), "stock_results": stock_results}
 
     def _create_items(self, tenant_id: int, order: Any, return_id: int, items: list[dict[str, Any]]) -> None:

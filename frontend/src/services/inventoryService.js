@@ -4,6 +4,10 @@ export function listStock(accessToken) {
   return apiRequest('/inventory/stock', { accessToken });
 }
 
+export function listReservations(accessToken) {
+  return apiRequest('/inventory/reservations', { accessToken });
+}
+
 export function listInventoryBatches(accessToken) {
   return apiRequest('/inventory/batches', { accessToken });
 }

@@ -29,10 +29,9 @@ const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']);
 const fulfillableStatuses = new Set(['CONFIRMED', 'PARTIALLY_FULFILLED']);
 const salesSteps = [
   { key: 'DRAFT', label: 'Draft' },
-  { key: 'CONFIRMED', label: 'Confirmed' },
-  { key: 'PICKED', label: 'Picked' },
-  { key: 'PACKED', label: 'Packed' },
-  { key: 'FULFILLED', label: 'Fulfilled / Closed', matches: ['FULFILLED', 'CLOSED', 'PARTIALLY_FULFILLED'] },
+  { key: 'CONFIRMED', label: 'Confirmed / Picking' },
+  { key: 'PARTIALLY_FULFILLED', label: 'Partially Fulfilled' },
+  { key: 'FULFILLED', label: 'Fulfilled / Closed', matches: ['FULFILLED', 'CLOSED'] },
 ];
 const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10';
 
@@ -264,9 +263,23 @@ export function SalesOrderDetailPage() {
                 Close
               </Button>
             ) : null}
-            {fulfillableStatuses.has(order.status) ? (
+            {mayWrite && fulfillableStatuses.has(order.status) ? (
               <Link to={`/sales/${order.id}/pick`}>
                 <Button variant="secondary">Pick</Button>
+              </Link>
+            ) : null}
+            {mayWrite && pickTasks.some((task) => task.status === 'PICKED') ? (
+              <Link to={`/sales/${order.id}/package`}>
+                <Button variant="secondary">
+                  <PackageCheck className="mr-1.5" size={14} /> Package
+                </Button>
+              </Link>
+            ) : null}
+            {mayWrite && fulfillableStatuses.has(order.status) && packages.some((pkg) => pkg.status === 'PACKED') ? (
+              <Link to={`/sales/${order.id}/fulfill`}>
+                <Button variant="secondary">
+                  <Truck className="mr-1.5" size={14} /> Fulfill
+                </Button>
               </Link>
             ) : null}
             {mayWrite && ['PARTIALLY_FULFILLED', 'FULFILLED', 'CLOSED'].includes(order.status) ? (

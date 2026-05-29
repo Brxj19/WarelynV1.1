@@ -113,6 +113,16 @@ export const navGroups = [
         ],
       },
       { icon: LogIn, label: 'Putaway Tasks', section: 'Warehousing', to: '/putaway-tasks', roles: writeRoles, exact: true },
+      {
+        icon: ClipboardList,
+        label: 'Cycle Counts',
+        section: 'Warehousing',
+        roles: writeRoles,
+        children: [
+          { icon: ClipboardList, label: 'All Sessions', section: 'Warehousing', to: '/cycle-counts', roles: writeRoles, exact: true },
+          { icon: PlusSquare, label: 'New Session', section: 'Warehousing', to: '/cycle-counts/new', roles: writeRoles, exact: true },
+        ],
+      },
     ],
   },
   {
@@ -266,6 +276,7 @@ export const quickCreateItems = [
 const detailRoutes = [
   { pattern: /^\/inventory$/, label: 'Inventory Dashboard', section: 'Overview', to: '/dashboard', icon: LayoutDashboard },
   { pattern: /^\/warehouses\/[^/]+$/, label: 'Warehouse Detail', section: 'Warehousing', to: '/warehouses', icon: Warehouse },
+  { pattern: /^\/cycle-counts\/[^/]+$/, label: 'Cycle Count Session', section: 'Warehousing', to: '/cycle-counts', icon: ClipboardList },
   { pattern: /^\/purchases\/[^/]+$/, label: 'Purchase Order Detail', section: 'Purchases', to: '/purchases', icon: ShoppingBag },
   { pattern: /^\/purchases\/[^/]+\/receive$/, label: 'Receive Purchase Order', section: 'Purchases', to: '/purchase-receipts/new', icon: Truck },
   { pattern: /^\/purchase-receipts\/[^/]+$/, label: 'Purchase Receipt', section: 'Purchases', to: '/purchase-receipts', icon: Truck },
