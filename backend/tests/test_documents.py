@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.documents import Bill, DocumentTemplate, Invoice, NumberSequence
 from app.services.documents import DocumentTemplateService, DocumentsService
 from test_purchasing import auth_headers as purchase_headers
-from test_purchasing import create_po, create_receipt, register_and_login as purchase_login, setup_purchase_dimension, submit_po
+from test_purchasing import approve_po, create_po, create_receipt, register_and_login as purchase_login, setup_purchase_dimension, submit_po
 from test_sales import auth_headers as sales_headers
 from test_sales import confirm_sales_order, create_fulfillment, create_sales_order, register_and_login as sales_login, setup_sales_dimension, stock_in
 
@@ -56,7 +56,7 @@ def test_create_bill_from_receipt_send_pdf_and_paid(client: TestClient, db_sessi
     login = purchase_login(client, "bill@example.com")
     token = login["access_token"]
     dimension = setup_purchase_dimension(client, token, "BILL")
-    po = submit_po(client, token, create_po(client, token, dimension, "5", "PO-BILL")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "5", "PO-BILL")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "5", "GRN-BILL")
 
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
@@ -117,7 +117,7 @@ def test_bill_pdf_endpoint_returns_pdf_bytes_with_length(client: TestClient, db_
     login = purchase_login(client, "billpdf@example.com")
     token = login["access_token"]
     dimension = setup_purchase_dimension(client, token, "BPDF")
-    po = submit_po(client, token, create_po(client, token, dimension, "3", "PO-BPDF")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "3", "PO-BPDF")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "3", "GRN-BPDF")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
     pdf = client.get(f"/api/bills/{created.json()['id']}/pdf", headers=purchase_headers(token))
@@ -143,7 +143,7 @@ def test_render_bill_html_contains_bill_number(client: TestClient, db_session: S
     login = purchase_login(client, "billhtml@example.com")
     token = login["access_token"]
     dimension = setup_purchase_dimension(client, token, "BHTML")
-    po = submit_po(client, token, create_po(client, token, dimension, "2", "PO-BHTML")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "2", "PO-BHTML")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "2", "GRN-BHTML")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
     bill_number = created.json()["bill_number"]
@@ -266,7 +266,7 @@ def test_bill_mark_paid_status_transition(client: TestClient, db_session: Sessio
     login = purchase_login(client, "bill-paid@example.com")
     token = login["access_token"]
     dimension = setup_purchase_dimension(client, token, "BPAID")
-    po = submit_po(client, token, create_po(client, token, dimension, "2", "PO-BPAID")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "2", "PO-BPAID")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "2", "GRN-BPAID")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
     bill_id = created.json()["id"]
@@ -280,7 +280,7 @@ def test_bill_pdf_endpoint_returns_valid_pdf_bytes(client: TestClient, db_sessio
     login = purchase_login(client, "billpdf2@example.com")
     token = login["access_token"]
     dimension = setup_purchase_dimension(client, token, "BPDF2")
-    po = submit_po(client, token, create_po(client, token, dimension, "4", "PO-BPDF2")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "4", "PO-BPDF2")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "4", "GRN-BPDF2")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
     pdf = client.get(f"/api/bills/{created.json()['id']}/pdf", headers=purchase_headers(token))
@@ -413,7 +413,7 @@ def test_bill_pdf_rejects_invoice_template(client: TestClient, db_session: Sessi
 
     # Create a bill to render
     dimension = setup_purchase_dimension(client, token, "REJI")
-    po = submit_po(client, token, create_po(client, token, dimension, "2", "PO-REJI")["id"])
+    po = approve_po(client, token, submit_po(client, token, create_po(client, token, dimension, "2", "PO-REJI")["id"])["id"])
     receipt = create_receipt(client, token, po, dimension, "2", "GRN-REJI")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token))
     bill_id = created.json()["id"]
@@ -509,7 +509,7 @@ def test_bill_pdf_rejects_cross_tenant_template(client: TestClient, db_session: 
 
     # Create a bill in tenant B
     dimension = setup_purchase_dimension(client, token_b, "CROSS")
-    po = submit_po(client, token_b, create_po(client, token_b, dimension, "1", "PO-CROSS")["id"])
+    po = approve_po(client, token_b, submit_po(client, token_b, create_po(client, token_b, dimension, "1", "PO-CROSS")["id"])["id"])
     receipt = create_receipt(client, token_b, po, dimension, "1", "GRN-CROSS")
     created = client.post("/api/bills", json={"receipt_id": receipt["id"]}, headers=purchase_headers(token_b))
     bill_id = created.json()["id"]

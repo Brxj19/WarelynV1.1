@@ -15,6 +15,14 @@ def create_pick_task(client: TestClient, token: str, order_id: int, number: str 
     return response.json()
 
 
+def get_auto_pick_task(client: TestClient, token: str, order_id: int) -> dict:
+    response = client.get(f"/api/sales-orders/{order_id}/pick-tasks", headers=auth_headers(token))
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) >= 1
+    return tasks[0]
+
+
 def pick_all(client: TestClient, token: str, pick_task: dict) -> dict:
     response = client.post(
         f"/api/pick-tasks/{pick_task['id']}/pick",
@@ -31,20 +39,24 @@ def test_create_and_pick_task_from_confirmed_sales_order(client: TestClient, db_
     stock_in(client, login["access_token"], dimension, "10")
     order = create_sales_order(client, login["access_token"], dimension, "4")
     confirm_sales_order(client, login["access_token"], order, dimension, "4")
-    stock_before = db_session.query(WarehouseStock).one()
-    ledger_count = db_session.query(StockLedgerEntry).count()
 
-    pick_task = create_pick_task(client, login["access_token"], order["id"])
+    # Pick task is auto-created on confirmation
+    tasks_response = client.get(f"/api/sales-orders/{order['id']}/pick-tasks", headers=auth_headers(login["access_token"]))
+    assert tasks_response.status_code == 200
+    pick_tasks = tasks_response.json()
+    assert len(pick_tasks) == 1
+    pick_task = pick_tasks[0]
     picked = pick_all(client, login["access_token"], pick_task)
 
     assert pick_task["status"] == "PENDING"
     assert len(pick_task["items"]) == 1
     assert picked["status"] == "PICKED"
     assert picked["items"][0]["picked_quantity"] == "4.000"
-    db_session.refresh(stock_before)
-    assert stock_before.quantity_on_hand == Decimal("10.000")
-    assert stock_before.quantity_reserved == Decimal("4.000")
-    assert db_session.query(StockLedgerEntry).count() == ledger_count
+    # After picking, auto-pack-and-fulfill runs: stock is deducted
+    stock = db_session.query(WarehouseStock).one()
+    assert stock.quantity_on_hand == Decimal("6.000")
+    assert stock.quantity_reserved == Decimal("0.000")
+    assert stock.quantity_available == Decimal("6.000")
 
 
 def test_pick_task_creation_requires_pickable_order_and_active_reservations(client: TestClient) -> None:
@@ -67,7 +79,7 @@ def test_picked_quantity_cannot_exceed_reserved_quantity(client: TestClient) -> 
     stock_in(client, login["access_token"], dimension, "5")
     order = create_sales_order(client, login["access_token"], dimension, "2")
     confirm_sales_order(client, login["access_token"], order, dimension, "2")
-    pick_task = create_pick_task(client, login["access_token"], order["id"])
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
 
     response = client.post(f"/api/pick-tasks/{pick_task['id']}/pick", json={"items": [{"pick_task_item_id": pick_task["items"][0]["id"], "picked_quantity": "3"}]}, headers=auth_headers(login["access_token"]))
 
@@ -81,7 +93,7 @@ def test_cancel_pick_task_does_not_mutate_stock_or_ledger(client: TestClient, db
     stock_in(client, login["access_token"], dimension, "5")
     order = create_sales_order(client, login["access_token"], dimension, "2")
     confirm_sales_order(client, login["access_token"], order, dimension, "2")
-    pick_task = create_pick_task(client, login["access_token"], order["id"])
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
     ledger_count = db_session.query(StockLedgerEntry).count()
 
     cancel = client.post(f"/api/pick-tasks/{pick_task['id']}/cancel", json={}, headers=auth_headers(login["access_token"]))
@@ -101,18 +113,16 @@ def test_serial_picking_requires_valid_unique_serial_and_fulfillment_sells_seria
     assert response.status_code == 200
     serial = db_session.query(InventorySerial).one()
     order = create_sales_order(client, login["access_token"], dimension, "1", "SO-SER-PICK")
-    confirmed = confirm_sales_order(client, login["access_token"], order, dimension, "1", "confirm-ser-pick")
-    pick_task = create_pick_task(client, login["access_token"], order["id"], "PICK-SER")
+    confirm_sales_order(client, login["access_token"], order, dimension, "1", "confirm-ser-pick")
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
 
     missing_serial = client.post(f"/api/pick-tasks/{pick_task['id']}/pick", json={"items": [{"pick_task_item_id": pick_task["items"][0]["id"], "picked_quantity": "1"}]}, headers=auth_headers(login["access_token"]))
     picked = client.post(f"/api/pick-tasks/{pick_task['id']}/pick", json={"items": [{"pick_task_item_id": pick_task["items"][0]["id"], "picked_quantity": "1", "serial_id": serial.id}]}, headers=auth_headers(login["access_token"]))
-    fulfillment = create_fulfillment(client, login["access_token"], order, dimension, confirmed["stock_results"][0]["reservation"]["id"], "1", "FUL-SER")
-    commit = client.post(f"/api/sales-fulfillments/{fulfillment['id']}/commit", json={"idempotency_key": "fulfill-ser"}, headers=auth_headers(login["access_token"]))
 
     assert missing_serial.status_code == 400
     assert missing_serial.json()["error"]["code"] == "SERIAL_SELECTION_REQUIRED"
     assert picked.status_code == 200
-    assert commit.status_code == 200
+    # Auto-pack-and-fulfill runs after pick, serial should be SOLD
     db_session.refresh(serial)
     assert serial.status == InventorySerialStatus.SOLD
     assert db_session.query(StockLedgerEntry).filter(StockLedgerEntry.movement_type == MovementType.SALES_DEDUCT, StockLedgerEntry.serial_id == serial.id).count() == 1
@@ -130,7 +140,7 @@ def test_serial_allocation_validation_and_duplicates(client: TestClient, db_sess
     order = create_sales_order(client, login["access_token"], dimension, "2", "SO-SER-DUP")
     confirm = client.post(f"/api/sales-orders/{order['id']}/confirm", json={"idempotency_key": "confirm-ser-dup", "allocations": [{"sales_order_item_id": order["items"][0]["id"], "warehouse_id": dimension["warehouse_id"], "location_id": dimension["location_id"], "quantity": "1"}, {"sales_order_item_id": order["items"][0]["id"], "warehouse_id": dimension["warehouse_id"], "location_id": dimension["location_id"], "quantity": "1"}]}, headers=auth_headers(login["access_token"]))
     assert confirm.status_code == 200
-    pick_task = create_pick_task(client, login["access_token"], order["id"], "PICK-SER-DUP")
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
 
     product_mismatch = client.post(f"/api/pick-tasks/{pick_task['id']}/pick", json={"items": [{"pick_task_item_id": pick_task["items"][0]["id"], "picked_quantity": "1", "serial_id": serials["SER-OTHER-1"].id}]}, headers=auth_headers(login["access_token"]))
     duplicate_request = client.post(f"/api/pick-tasks/{pick_task['id']}/pick", json={"items": [{"pick_task_item_id": pick_task["items"][0]["id"], "picked_quantity": "1", "serial_id": serials["SER-DUP-1"].id}, {"pick_task_item_id": pick_task["items"][1]["id"], "picked_quantity": "1", "serial_id": serials["SER-DUP-1"].id}]}, headers=auth_headers(login["access_token"]))
@@ -141,47 +151,43 @@ def test_serial_allocation_validation_and_duplicates(client: TestClient, db_sess
     assert duplicate_request.json()["error"]["code"] == "DUPLICATE_SERIAL_ALLOCATION"
 
 
-def test_package_from_picked_items_is_optional_and_does_not_mutate_stock(client: TestClient, db_session: Session) -> None:
+def test_auto_pack_and_fulfill_creates_package_and_deducts_stock(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])
     stock_in(client, login["access_token"], dimension, "10")
     order = create_sales_order(client, login["access_token"], dimension, "3")
-    confirmed = confirm_sales_order(client, login["access_token"], order, dimension, "3")
-    pick_task = pick_all(client, login["access_token"], create_pick_task(client, login["access_token"], order["id"]))
-    ledger_count = db_session.query(StockLedgerEntry).count()
+    confirm_sales_order(client, login["access_token"], order, dimension, "3")
+    pick_task = pick_all(client, login["access_token"], get_auto_pick_task(client, login["access_token"], order["id"]))
 
-    package = client.post(f"/api/sales-orders/{order['id']}/packages", json={"package_number": "PKG-1", "pick_task_item_ids": [pick_task["items"][0]["id"]]}, headers=auth_headers(login["access_token"]))
-    packed = client.post(f"/api/packages/{package.json()['id']}/pack", json={}, headers=auth_headers(login["access_token"]))
-    assert package.status_code == 201
-    assert packed.status_code == 200
-    assert packed.json()["status"] == "PACKED"
-    assert db_session.query(Package).one().status == PackageStatus.PACKED
-    assert db_session.query(StockLedgerEntry).count() == ledger_count
-
-    fulfillment = create_fulfillment(client, login["access_token"], order, dimension, confirmed["stock_results"][0]["reservation"]["id"], "3")
-    commit = client.post(f"/api/sales-fulfillments/{fulfillment['id']}/commit", json={"idempotency_key": "fulfill-after-package"}, headers=auth_headers(login["access_token"]))
-    assert commit.status_code == 200
+    # Auto-pack-and-fulfill runs after pick completes
+    assert pick_task["status"] == "PICKED"
+    package = db_session.query(Package).first()
+    assert package is not None
+    assert package.status == PackageStatus.PACKED
+    stock = db_session.query(WarehouseStock).one()
+    assert stock.quantity_on_hand == Decimal("7.000")
+    assert stock.quantity_reserved == Decimal("0.000")
+    assert stock.quantity_available == Decimal("7.000")
 
 
-def test_cannot_pack_unpicked_items_and_cancel_package_does_not_mutate_stock(client: TestClient, db_session: Session) -> None:
+def test_cannot_pack_unpicked_items_and_auto_fulfill_deducts_stock_correctly(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])
     stock_in(client, login["access_token"], dimension, "5")
     order = create_sales_order(client, login["access_token"], dimension, "2")
     confirm_sales_order(client, login["access_token"], order, dimension, "2")
-    pick_task = create_pick_task(client, login["access_token"], order["id"])
-    ledger_count = db_session.query(StockLedgerEntry).count()
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
 
+    # Cannot create package from unpicked items
     unpicked = client.post(f"/api/sales-orders/{order['id']}/packages", json={"package_number": "PKG-UNPICKED", "pick_task_item_ids": [pick_task["items"][0]["id"]]}, headers=auth_headers(login["access_token"]))
-    picked = pick_all(client, login["access_token"], pick_task)
-    package = client.post(f"/api/sales-orders/{order['id']}/packages", json={"package_number": "PKG-CANCEL", "pick_task_item_ids": [picked["items"][0]["id"]]}, headers=auth_headers(login["access_token"]))
-    cancel = client.post(f"/api/packages/{package.json()['id']}/cancel", json={}, headers=auth_headers(login["access_token"]))
-
     assert unpicked.status_code == 409
-    assert cancel.status_code == 200
-    assert cancel.json()["status"] == "CANCELLED"
-    assert db_session.query(WarehouseStock).one().quantity_on_hand == Decimal("5.000")
-    assert db_session.query(StockLedgerEntry).count() == ledger_count
+
+    # After picking, auto-pack-and-fulfill runs
+    picked = pick_all(client, login["access_token"], pick_task)
+    assert picked["status"] == "PICKED"
+    stock = db_session.query(WarehouseStock).one()
+    assert stock.quantity_on_hand == Decimal("3.000")
+    assert stock.quantity_reserved == Decimal("0.000")
 
 
 def test_tenant_isolation_and_roles_for_picking_and_packing(client: TestClient, db_session: Session) -> None:
@@ -190,7 +196,7 @@ def test_tenant_isolation_and_roles_for_picking_and_packing(client: TestClient, 
     stock_in(client, login_a["access_token"], dimension_a, "5")
     order_a = create_sales_order(client, login_a["access_token"], dimension_a, "1", "SO-FA")
     confirm_sales_order(client, login_a["access_token"], order_a, dimension_a, "1", "confirm-fa")
-    pick_a = create_pick_task(client, login_a["access_token"], order_a["id"], "PICK-FA")
+    pick_a = get_auto_pick_task(client, login_a["access_token"], order_a["id"])
     viewer_token = create_role_user(client, db_session, UserRole.VIEWER, "viewer-fulfill@example.com")
     purchase_token = create_role_user(client, db_session, UserRole.PURCHASE_STAFF, "purchase-fulfill@example.com")
     sales_token = create_role_user(client, db_session, UserRole.SALES_STAFF, "sales-fulfill@example.com")

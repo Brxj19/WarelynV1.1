@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackButton } from '../components/ui/BackButton.jsx';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -15,6 +15,8 @@ import * as purchasingService from '../services/purchasingService.js';
 const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10';
 
 export function PurchaseOrderFormPage() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const [vendors, setVendors] = useState([]);
@@ -32,6 +34,26 @@ export function PurchaseOrderFormPage() {
         const [vendorRows, productRows] = await Promise.all([catalogService.listVendors(accessToken), catalogService.listProducts(accessToken)]);
         setVendors(vendorRows);
         setProducts(productRows);
+        if (isEdit) {
+          const order = await purchasingService.getPurchaseOrder(accessToken, id);
+          if (order.status !== 'DRAFT') {
+            navigate(`/purchases/${id}`, { replace: true });
+            return;
+          }
+          setForm({
+            vendor_id: String(order.vendor_id),
+            po_number: order.po_number,
+            order_date: order.order_date,
+            expected_date: order.expected_date || '',
+            notes: order.notes || '',
+          });
+          setItems(order.items.map((item) => ({
+            product_id: String(item.product_id),
+            ordered_quantity: String(item.ordered_quantity),
+            unit_cost: String(item.unit_cost),
+            notes: item.notes || '',
+          })));
+        }
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -39,7 +61,7 @@ export function PurchaseOrderFormPage() {
       }
     }
     load();
-  }, [accessToken]);
+  }, [accessToken, id]);
 
   function updateItem(index, key, value) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [key]: value } : item)));
@@ -55,7 +77,12 @@ export function PurchaseOrderFormPage() {
         vendor_id: Number(form.vendor_id),
         items: items.filter((item) => item.product_id).map((item) => ({ ...item, product_id: Number(item.product_id) })),
       };
-      const order = await purchasingService.createPurchaseOrder(accessToken, payload);
+      let order;
+      if (isEdit) {
+        order = await purchasingService.updatePurchaseOrder(accessToken, id, payload);
+      } else {
+        order = await purchasingService.createPurchaseOrder(accessToken, payload);
+      }
       navigate(`/purchases/${order.id}`);
     } catch (saveError) {
       setError(saveError.message);
@@ -68,8 +95,8 @@ export function PurchaseOrderFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/purchases" />
-      <PageHeader backTo="/purchases" description="Create a draft purchase order. Stock is not changed until a receipt is committed." kicker="Purchasing" title="New purchase order" />
+      <BackButton to={isEdit ? `/purchases/${id}` : '/purchases'} />
+      <PageHeader backTo={isEdit ? `/purchases/${id}` : '/purchases'} description={isEdit ? 'Edit this draft purchase order. Changes are saved when you click Update.' : 'Create a draft purchase order. Stock is not changed until a receipt is committed.'} kicker="Purchasing" title={isEdit ? `Edit ${form.po_number || 'purchase order'}` : 'New purchase order'} />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={handleSubmit}>
         <Card>
@@ -83,14 +110,14 @@ export function PurchaseOrderFormPage() {
           </CardBody>
         </Card>
         <Card>
-          <CardHeader className="flex items-center justify-between"><h2 className="text-lg font-semibold text-warelyn-text">Product lines</h2><Button variant="secondary" onClick={() => setItems((current) => [...current, { product_id: '', ordered_quantity: '1', unit_cost: '0', notes: '' }])}>Add line</Button></CardHeader>
+          <CardHeader className="flex items-center justify-between"><h2 className="text-lg font-semibold text-warelyn-text">Product lines</h2><Button type="button" variant="secondary" onClick={() => setItems((current) => [...current, { product_id: '', ordered_quantity: '1', unit_cost: '0', notes: '' }])}>Add line</Button></CardHeader>
           <CardBody className="space-y-4">
             {items.map((item, index) => (
               <div className="grid gap-3 rounded-xl border border-warelyn-border p-4 md:grid-cols-[2fr_1fr_1fr_auto]" key={index}>
                 <label className="block"><span className="mb-2 block text-sm font-medium text-warelyn-text">Product</span><select className={selectClass} required value={item.product_id} onChange={(event) => updateItem(index, 'product_id', event.target.value)}><option value="">Select product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.sku})</option>)}</select></label>
                 <Input label="Quantity" min="0.001" required step="0.001" type="number" value={item.ordered_quantity} onChange={(event) => updateItem(index, 'ordered_quantity', event.target.value)} />
                 <Input label="Unit cost" min="0" required step="0.01" type="number" value={item.unit_cost} onChange={(event) => updateItem(index, 'unit_cost', event.target.value)} />
-                <div className="flex items-end"><Button disabled={items.length === 1} variant="secondary" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button></div>
+                <div className="flex items-end"><Button disabled={items.length === 1} type="button" variant="secondary" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button></div>
               </div>
             ))}
           </CardBody>
@@ -98,11 +125,11 @@ export function PurchaseOrderFormPage() {
         <div className="sticky-form-footer">
           <div className="workflow-helper-panel max-w-xl">
             <h3>What happens next?</h3>
-            <p>This saves a draft purchase order only. Receiving and stock increase happen later through the receipt workflow.</p>
+            <p>{isEdit ? 'Your changes will be saved to the draft. Submit the order when ready for approval.' : 'This saves a draft purchase order only. Receiving and stock increase happen later through the receipt workflow.'}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => navigate('/purchases')} type="button" variant="ghost">Cancel</Button>
-            <Button disabled={isSaving} type="submit">{isSaving ? 'Creating...' : 'Create purchase order'}</Button>
+            <Button onClick={() => navigate(isEdit ? `/purchases/${id}` : '/purchases')} type="button" variant="ghost">Cancel</Button>
+            <Button disabled={isSaving} type="submit">{isSaving ? 'Saving...' : isEdit ? 'Update purchase order' : 'Save purchase order'}</Button>
           </div>
         </div>
       </form>

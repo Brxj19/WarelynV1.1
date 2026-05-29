@@ -156,7 +156,14 @@ class FulfillmentService:
         except AppError:
             self.db.rollback()
             raise
-        return self.get_pick_task(tenant_id, pick_task.id)
+        result = self.get_pick_task(tenant_id, pick_task.id)
+        if result.status == PickTaskStatus.PICKED:
+            try:
+                self._auto_pack_and_fulfill(tenant_id, pick_task.sales_order_id, result)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).exception("Auto-pack-and-fulfill failed for order %s: %s", pick_task.sales_order_id, exc)
+        return result
 
     def cancel_pick_task(self, tenant_id: int, pick_task_id: int) -> PickTask:
         pick_task = self.repository.lock_pick_task(tenant_id, pick_task_id)
@@ -240,6 +247,41 @@ class FulfillmentService:
         package.status = PackageStatus.CANCELLED
         package.cancelled_at = datetime.now(UTC)
         return self._commit_and_get_package(tenant_id, package.id)
+
+    def _auto_pack_and_fulfill(self, tenant_id: int, order_id: int, pick_task) -> None:
+        import uuid
+        from app.services.sales import SalesService
+        order = self._require_order(tenant_id, order_id)
+        actor_id = pick_task.created_by
+
+        package_number = f"PKG-{uuid.uuid4().hex[:8].upper()}"
+        item_ids = [item.id for item in pick_task.items if item.status == PickTaskItemStatus.PICKED]
+        package = self.create_package(tenant_id, order_id, {"package_number": package_number, "pick_task_item_ids": item_ids})
+        self.pack_package(tenant_id, actor_id, package.id, {})
+
+        reservations = self.repository.active_reservations_for_order(tenant_id, order.order_number)
+        if not reservations:
+            return
+        fulfillment_number = f"FUL-{uuid.uuid4().hex[:8].upper()}"
+        fulfillment_items = []
+        for reservation in reservations:
+            order_item = next((item for item in order.items if item.product_id == reservation.product_id), None)
+            if order_item is None:
+                continue
+            fulfillment_items.append({
+                "sales_order_item_id": order_item.id,
+                "product_id": reservation.product_id,
+                "warehouse_id": reservation.warehouse_id,
+                "location_id": reservation.location_id,
+                "reservation_id": reservation.id,
+                "fulfilled_quantity": str(reservation.quantity),
+            })
+        if not fulfillment_items:
+            return
+        sales_service = SalesService(self.db)
+        fulfillment = sales_service.create_fulfillment(tenant_id, actor_id, order_id, {"fulfillment_number": fulfillment_number, "items": fulfillment_items})
+        idempotency_key = f"auto-fulfill-{order_id}-{uuid.uuid4().hex[:8]}"
+        sales_service.commit_fulfillment(tenant_id, actor_id, fulfillment.id, {"idempotency_key": idempotency_key})
 
     def _require_order(self, tenant_id: int, order_id: int):
         order = self.repository.get_sales_order(tenant_id, order_id)

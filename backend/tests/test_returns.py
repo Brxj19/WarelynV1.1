@@ -11,11 +11,21 @@ from test_sales import auth_headers, confirm_sales_order, create_fulfillment, cr
 
 def fulfilled_order(client: TestClient, token: str, dimension: dict[str, int], quantity: str = "2", order_number: str = "SO-RET", fulfillment_number: str = "FUL-RET") -> dict:
     order = create_sales_order(client, token, dimension, quantity, order_number)
-    confirmed = confirm_sales_order(client, token, order, dimension, quantity, f"confirm-{order_number}")
-    fulfillment = create_fulfillment(client, token, order, dimension, confirmed["stock_results"][0]["reservation"]["id"], quantity, fulfillment_number)
-    commit = client.post(f"/api/sales-fulfillments/{fulfillment['id']}/commit", json={"idempotency_key": f"fulfill-{order_number}"}, headers=auth_headers(token))
-    assert commit.status_code == 200
-    return commit.json()["sales_order"]
+    confirm_sales_order(client, token, order, dimension, quantity, f"confirm-{order_number}")
+    # Pick the auto-created task; auto-pack-and-fulfill runs after pick
+    tasks = client.get(f"/api/sales-orders/{order['id']}/pick-tasks", headers=auth_headers(token))
+    assert tasks.status_code == 200
+    pick_task = tasks.json()[0]
+    pick_response = client.post(
+        f"/api/pick-tasks/{pick_task['id']}/pick",
+        json={"items": [{"pick_task_item_id": item["id"], "picked_quantity": item["required_quantity"]} for item in pick_task["items"]]},
+        headers=auth_headers(token),
+    )
+    assert pick_response.status_code == 200
+    # Reload the order after auto-fulfill
+    order_response = client.get(f"/api/sales-orders/{order['id']}", headers=auth_headers(token))
+    assert order_response.status_code == 200
+    return order_response.json()
 
 
 def create_return(client: TestClient, token: str, order: dict, dimension: dict[str, int], quantity: str = "1", number: str = "RET-1", serial_id: int | None = None) -> dict:
@@ -116,17 +126,20 @@ def test_serial_sellable_return_updates_existing_sold_serial(client: TestClient,
     assert stock.status_code == 200
     serial = db_session.query(InventorySerial).one()
     order = create_sales_order(client, token, dimension, "1", "SO-SER-RET")
-    confirmed = confirm_sales_order(client, token, order, dimension, "1", "confirm-ser-ret")
-    pick = client.post(f"/api/sales-orders/{order['id']}/pick-tasks", json={"pick_number": "PICK-SER-RET"}, headers=auth_headers(token))
-    assert pick.status_code == 201
-    picked = client.post(f"/api/pick-tasks/{pick.json()['id']}/pick", json={"items": [{"pick_task_item_id": pick.json()["items"][0]["id"], "picked_quantity": "1", "serial_id": serial.id}]}, headers=auth_headers(token))
+    confirm_sales_order(client, token, order, dimension, "1", "confirm-ser-ret")
+    pick_tasks = client.get(f"/api/sales-orders/{order['id']}/pick-tasks", headers=auth_headers(token))
+    assert pick_tasks.status_code == 200
+    pick = pick_tasks.json()[0]
+    picked = client.post(f"/api/pick-tasks/{pick['id']}/pick", json={"items": [{"pick_task_item_id": pick["items"][0]["id"], "picked_quantity": "1", "serial_id": serial.id}]}, headers=auth_headers(token))
     assert picked.status_code == 200
-    fulfillment = create_fulfillment(client, token, order, dimension, confirmed["stock_results"][0]["reservation"]["id"], "1", "FUL-SER-RET")
-    commit = client.post(f"/api/sales-fulfillments/{fulfillment['id']}/commit", json={"idempotency_key": "fulfill-ser-ret"}, headers=auth_headers(token))
-    assert commit.status_code == 200
+    # Auto-pack-and-fulfill runs after pick; serial should be SOLD
     db_session.refresh(serial)
     assert serial.status == InventorySerialStatus.SOLD
-    sales_return = create_return(client, token, commit.json()["sales_order"], dimension, "1", "RET-SER", serial.id)
+    # Reload order after auto-fulfill
+    order_response = client.get(f"/api/sales-orders/{order['id']}", headers=auth_headers(token))
+    assert order_response.status_code == 200
+    fulfilled_order_data = order_response.json()
+    sales_return = create_return(client, token, fulfilled_order_data, dimension, "1", "RET-SER", serial.id)
     submitted = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers=auth_headers(token))
 
     inspect_and_process(client, token, submitted.json(), "ACCEPTED_RESTOCK", "1", key="process-ser-ret")

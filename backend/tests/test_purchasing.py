@@ -65,6 +65,12 @@ def submit_po(client: TestClient, token: str, po_id: int) -> dict[str, object]:
     return response.json()
 
 
+def approve_po(client: TestClient, token: str, po_id: int) -> dict[str, object]:
+    response = client.post(f"/api/purchase-orders/{po_id}/approve", json={}, headers=auth_headers(token))
+    assert response.status_code == 200
+    return response.json()
+
+
 def receipt_payload(po: dict[str, object], dimension: dict[str, int], quantity: str = "4", receipt_number: str = "GRN-1") -> dict[str, object]:
     item = po["items"][0]
     return {
@@ -120,7 +126,7 @@ def test_cancel_draft_and_submitted_purchase_orders_and_cannot_receive_cancelled
 def test_partial_and_full_receipt_commit_updates_stock_ledger_and_status(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_purchase_dimension(client, login["access_token"])
-    po = submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "10")["id"])
+    po = approve_po(client, login["access_token"], submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "10")["id"])["id"])
     receipt = create_receipt(client, login["access_token"], po, dimension, "4")
 
     partial = client.post(f"/api/purchase-receipts/{receipt['id']}/commit", json={"idempotency_key": "receive-1"}, headers=auth_headers(login["access_token"]))
@@ -142,7 +148,7 @@ def test_partial_and_full_receipt_commit_updates_stock_ledger_and_status(client:
 def test_over_receiving_is_blocked(client: TestClient) -> None:
     login = register_and_login(client)
     dimension = setup_purchase_dimension(client, login["access_token"])
-    po = submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "5")["id"])
+    po = approve_po(client, login["access_token"], submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "5")["id"])["id"])
 
     response = client.post(f"/api/purchase-orders/{po['id']}/receipts", json=receipt_payload(po, dimension, "6"), headers=auth_headers(login["access_token"]))
 
@@ -153,7 +159,7 @@ def test_over_receiving_is_blocked(client: TestClient) -> None:
 def test_committed_receipt_cannot_be_edited_and_replay_does_not_duplicate_stock(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_purchase_dimension(client, login["access_token"])
-    po = submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "2")["id"])
+    po = approve_po(client, login["access_token"], submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "2")["id"])["id"])
     receipt = create_receipt(client, login["access_token"], po, dimension, "2")
     commit = client.post(f"/api/purchase-receipts/{receipt['id']}/commit", json={"idempotency_key": "receive-once"}, headers=auth_headers(login["access_token"]))
     replay = client.post(f"/api/purchase-receipts/{receipt['id']}/commit", json={"idempotency_key": "receive-once"}, headers=auth_headers(login["access_token"]))
@@ -169,7 +175,7 @@ def test_committed_receipt_cannot_be_edited_and_replay_does_not_duplicate_stock(
 def test_cancelled_receipt_does_not_mutate_stock(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_purchase_dimension(client, login["access_token"])
-    po = submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "3")["id"])
+    po = approve_po(client, login["access_token"], submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "3")["id"])["id"])
     receipt = create_receipt(client, login["access_token"], po, dimension, "3")
 
     cancel = client.post(f"/api/purchase-receipts/{receipt['id']}/cancel", json={}, headers=auth_headers(login["access_token"]))
@@ -184,11 +190,11 @@ def test_cancelled_receipt_does_not_mutate_stock(client: TestClient, db_session:
 def test_tenant_isolation_for_purchase_orders_receipts_and_locations(client: TestClient) -> None:
     login_a = register_and_login(client, "a@example.com")
     dimension_a = setup_purchase_dimension(client, login_a["access_token"], "A")
-    po_a = submit_po(client, login_a["access_token"], create_po(client, login_a["access_token"], dimension_a, po_number="PO-A")["id"])
+    po_a = approve_po(client, login_a["access_token"], submit_po(client, login_a["access_token"], create_po(client, login_a["access_token"], dimension_a, po_number="PO-A")["id"])["id"])
     receipt_a = create_receipt(client, login_a["access_token"], po_a, dimension_a)
     login_b = register_and_login(client, "b@example.com")
     dimension_b = setup_purchase_dimension(client, login_b["access_token"], "B")
-    po_b = submit_po(client, login_b["access_token"], create_po(client, login_b["access_token"], dimension_b, po_number="PO-B")["id"])
+    po_b = approve_po(client, login_b["access_token"], submit_po(client, login_b["access_token"], create_po(client, login_b["access_token"], dimension_b, po_number="PO-B")["id"])["id"])
     bad_payload = receipt_payload(po_b, {**dimension_b, "warehouse_id": dimension_a["warehouse_id"], "location_id": dimension_a["location_id"]})
 
     order_read = client.get(f"/api/purchase-orders/{po_a['id']}", headers=auth_headers(login_b["access_token"]))
@@ -211,21 +217,23 @@ def test_purchase_roles(client: TestClient, db_session: Session) -> None:
     sales_create = client.post("/api/purchase-orders", json=po_payload(dimension, po_number="PO-SALES"), headers=auth_headers(sales_token))
     purchase_po = create_po(client, purchase_token, dimension, po_number="PO-PURCHASE")
     submitted = submit_po(client, purchase_token, purchase_po["id"])
-    receipt = create_receipt(client, purchase_token, submitted, dimension, "1")
+    approved = approve_po(client, admin["access_token"], submitted["id"])
+    receipt = create_receipt(client, purchase_token, approved, dimension, "1")
     commit = client.post(f"/api/purchase-receipts/{receipt['id']}/commit", json={"idempotency_key": "purchase-staff"}, headers=auth_headers(purchase_token))
 
     assert viewer_create.status_code == 403
     assert sales_create.status_code == 403
     assert purchase_po["status"] == "DRAFT"
+    assert approved["status"] == "APPROVED"
     assert commit.status_code == 200
 
 
 def test_purchase_models_statuses_persist(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_purchase_dimension(client, login["access_token"])
-    po = submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "1")["id"])
+    po = approve_po(client, login["access_token"], submit_po(client, login["access_token"], create_po(client, login["access_token"], dimension, "1")["id"])["id"])
     receipt = create_receipt(client, login["access_token"], po, dimension, "1")
 
-    assert db_session.query(PurchaseOrder).one().status == PurchaseOrderStatus.SUBMITTED
+    assert db_session.query(PurchaseOrder).one().status == PurchaseOrderStatus.APPROVED
     assert db_session.query(PurchaseReceipt).one().status == PurchaseReceiptStatus.DRAFT
     assert receipt["status"] == "DRAFT"

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackButton } from '../components/ui/BackButton.jsx';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import { StatusBadge } from '../components/ui/Badge.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -13,14 +13,12 @@ import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { StockImpactPreview } from '../components/ui/StockImpactPreview.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as purchasingService from '../services/purchasingService.js';
-import * as documentService from '../services/documentService.js';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF']);
 
 export function PurchaseReceiptDetailPage() {
   const { id } = useParams();
   const { accessToken, user } = useAuth();
-  const navigate = useNavigate();
   const [receipt, setReceipt] = useState(null);
   const [summary, setSummary] = useState(null);
   const [idempotencyKey, setIdempotencyKey] = useState(`receipt-${id}-${Date.now()}`);
@@ -43,19 +41,6 @@ export function PurchaseReceiptDetailPage() {
   }
 
   useEffect(() => { load(); }, [accessToken, id]);
-
-  async function generateBillFromReceipt() {
-    setIsSaving(true);
-    setError('');
-    try {
-      const bill = await documentService.createBill(accessToken, { receipt_id: Number(id) });
-      navigate(`/bills/${bill.id}`);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   async function commit() {
     setIsSaving(true);
@@ -103,7 +88,9 @@ export function PurchaseReceiptDetailPage() {
           </>
         }
         kicker="Purchase receipt"
-        actions={mayWrite ? <Button disabled={isSaving} variant="secondary" onClick={generateBillFromReceipt}>Generate bill</Button> : null}
+        actions={
+          receipt.grn_number ? <span className="inline-flex items-center rounded-lg bg-green-50 px-3 py-1.5 text-sm font-semibold text-green-700">GRN: {receipt.grn_number}</span> : null
+        }
         status={<StatusBadge status={receipt.status}>{receipt.status}</StatusBadge>}
         title={receipt.receipt_number}
       />

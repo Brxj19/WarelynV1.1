@@ -43,6 +43,26 @@ class DocumentsRepository:
             .where(Bill.tenant_id == tenant_id, Bill.id == bill_id)
         )
 
+    def get_bill_for_purchase_order(self, tenant_id: int, purchase_order_id: int) -> Bill | None:
+        from app.models.documents import BillStatus
+        return self.db.scalar(
+            select(Bill).where(
+                Bill.tenant_id == tenant_id,
+                Bill.purchase_order_id == purchase_order_id,
+                Bill.status != BillStatus.VOID,
+            )
+        )
+
+    def get_invoice_for_sales_order(self, tenant_id: int, sales_order_id: int) -> Invoice | None:
+        from app.models.documents import InvoiceStatus
+        return self.db.scalar(
+            select(Invoice).where(
+                Invoice.tenant_id == tenant_id,
+                Invoice.sales_order_id == sales_order_id,
+                Invoice.status != InvoiceStatus.VOID,
+            )
+        )
+
     def list_bills(self, tenant_id: int) -> list[Bill]:
         return list(
             self.db.scalars(
@@ -106,6 +126,12 @@ class DocumentsRepository:
         return self.db.scalar(
             select(NumberSequence).where(NumberSequence.tenant_id == tenant_id, NumberSequence.sequence_key == sequence_key)
         )
+
+    def get_or_create_sequence(self, tenant_id: int, sequence_key: NumberSequenceKey, prefix: str, padding: int) -> NumberSequence:
+        seq = self.get_sequence(tenant_id, sequence_key)
+        if seq is None:
+            seq = self.create_sequence({"tenant_id": tenant_id, "sequence_key": sequence_key, "prefix": prefix, "next_number": 1, "padding": padding})
+        return seq
 
     def create_sequence(self, values: dict) -> NumberSequence:
         sequence = NumberSequence(**values)

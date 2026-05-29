@@ -143,21 +143,16 @@ export function InvoiceDetailPage() {
               <Download size={16} />
               PDF
             </Button>
-            {mayWrite && (
-              <Button disabled={isBusy || invoice.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendInvoice(accessToken, id))}>
+            {mayWrite && invoice.status !== 'PAID' && (
+              <Button disabled={isBusy} variant="secondary" onClick={() => run(() => documentService.sendInvoice(accessToken, id))}>
                 <Mail size={16} />
                 Send
               </Button>
             )}
-            {mayWrite && (
-              <Button disabled={isBusy || invoice.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markInvoicePaid(accessToken, id))}>
+            {mayWrite && invoice.status !== 'PAID' && (
+              <Button disabled={isBusy} variant="accent" onClick={() => run(() => documentService.markInvoicePaid(accessToken, id))}>
                 <Stamp size={16} />
                 Mark paid
-              </Button>
-            )}
-            {mayWrite && (
-              <Button disabled={isBusy || invoice.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidInvoice(accessToken, id))}>
-                Void
               </Button>
             )}
           </div>
@@ -322,21 +317,16 @@ export function BillDetailPage() {
               <Download size={16} />
               PDF
             </Button>
-            {mayWrite && (
-              <Button disabled={isBusy || bill.status === 'SENT'} variant="secondary" onClick={() => run(() => documentService.sendBill(accessToken, id))}>
+            {mayWrite && bill.status !== 'PAID' && (
+              <Button disabled={isBusy} variant="secondary" onClick={() => run(() => documentService.sendBill(accessToken, id))}>
                 <Mail size={16} />
                 Send
               </Button>
             )}
-            {mayWrite && (
-              <Button disabled={isBusy || bill.status === 'PAID'} variant="accent" onClick={() => run(() => documentService.markBillPaid(accessToken, id))}>
+            {mayWrite && bill.status !== 'PAID' && (
+              <Button disabled={isBusy} variant="accent" onClick={() => run(() => documentService.markBillPaid(accessToken, id))}>
                 <Receipt size={16} />
                 Mark paid
-              </Button>
-            )}
-            {mayWrite && (
-              <Button disabled={isBusy || bill.status === 'VOID'} variant="danger" onClick={() => run(() => documentService.voidBill(accessToken, id))}>
-                Void
               </Button>
             )}
           </div>

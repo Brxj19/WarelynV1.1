@@ -20,6 +20,10 @@ export function submitPurchaseOrder(accessToken, id) {
   return apiRequest(`/purchase-orders/${id}/submit`, { accessToken, method: 'POST', body: JSON.stringify({}) });
 }
 
+export function approvePurchaseOrder(accessToken, id) {
+  return apiRequest(`/purchase-orders/${id}/approve`, { accessToken, method: 'POST', body: JSON.stringify({}) });
+}
+
 export function cancelPurchaseOrder(accessToken, id) {
   return apiRequest(`/purchase-orders/${id}/cancel`, { accessToken, method: 'POST', body: JSON.stringify({}) });
 }

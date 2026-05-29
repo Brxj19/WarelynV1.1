@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackButton } from '../components/ui/BackButton.jsx';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -10,15 +10,19 @@ import { Input } from '../components/ui/Input.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as catalogService from '../services/catalogService.js';
+import * as inventoryService from '../services/inventoryService.js';
 import * as salesService from '../services/salesService.js';
 
 const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10';
 
 export function SalesOrderFormPage() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [stockByProduct, setStockByProduct] = useState({});
   const [form, setForm] = useState({
     customer_id: '',
     order_number: `SO-${Date.now()}`,
@@ -35,12 +39,39 @@ export function SalesOrderFormPage() {
     async function load() {
       setIsLoading(true);
       try {
-        const [customerRows, productRows] = await Promise.all([
+        const [customerRows, productRows, stockRows] = await Promise.all([
           catalogService.listCustomers(accessToken),
           catalogService.listProducts(accessToken),
+          inventoryService.listStock(accessToken),
         ]);
         setCustomers(customerRows);
-        setProducts(productRows);
+        const availableByProduct = {};
+        for (const row of stockRows) {
+          availableByProduct[row.product_id] = (availableByProduct[row.product_id] || 0) + Number(row.quantity_available);
+        }
+        setStockByProduct(availableByProduct);
+        const inStockProducts = productRows.filter((p) => (availableByProduct[p.id] || 0) > 0);
+        setProducts(isEdit ? productRows : inStockProducts);
+        if (isEdit) {
+          const order = await salesService.getSalesOrder(accessToken, id);
+          if (order.status !== 'DRAFT') {
+            navigate(`/sales/${id}`, { replace: true });
+            return;
+          }
+          setForm({
+            customer_id: String(order.customer_id),
+            order_number: order.order_number,
+            order_date: order.order_date,
+            expected_ship_date: order.expected_ship_date || '',
+            notes: order.notes || '',
+          });
+          setItems(order.items.map((item) => ({
+            product_id: String(item.product_id),
+            ordered_quantity: String(item.ordered_quantity),
+            unit_price: String(item.unit_price),
+            notes: item.notes || '',
+          })));
+        }
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -48,7 +79,7 @@ export function SalesOrderFormPage() {
       }
     }
     load();
-  }, [accessToken]);
+  }, [accessToken, id]);
 
   function updateItem(index, key, value) {
     setItems((current) =>
@@ -68,7 +99,12 @@ export function SalesOrderFormPage() {
           .filter((item) => item.product_id)
           .map((item) => ({ ...item, product_id: Number(item.product_id) })),
       };
-      const order = await salesService.createSalesOrder(accessToken, payload);
+      let order;
+      if (isEdit) {
+        order = await salesService.updateSalesOrder(accessToken, id, payload);
+      } else {
+        order = await salesService.createSalesOrder(accessToken, payload);
+      }
       navigate(`/sales/${order.id}`);
     } catch (saveError) {
       setError(saveError.message);
@@ -81,12 +117,12 @@ export function SalesOrderFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/sales" />
+      <BackButton to={isEdit ? `/sales/${id}` : '/sales'} />
       <PageHeader
-        backTo="/sales"
-        description="Create a draft sales order first. Stock is only reserved later during confirmation with warehouse and location allocation."
+        backTo={isEdit ? `/sales/${id}` : '/sales'}
+        description={isEdit ? 'Edit this draft sales order. Changes are saved when you click Update.' : 'Create a draft sales order first. Stock is only reserved later during confirmation with warehouse and location allocation.'}
         kicker="Sales"
-        title="New sales order"
+        title={isEdit ? `Edit ${form.order_number || 'sales order'}` : 'New sales order'}
       />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -169,7 +205,7 @@ export function SalesOrderFormPage() {
                       <option value="">Select product</option>
                       {products.map((productOption) => (
                         <option key={productOption.id} value={productOption.id}>
-                          {productOption.name} ({productOption.sku})
+                          {productOption.name} ({productOption.sku}) — Avail: {stockByProduct[productOption.id] ?? 0}
                         </option>
                       ))}
                     </select>
@@ -225,15 +261,15 @@ export function SalesOrderFormPage() {
           <div className="workflow-helper-panel max-w-xl">
             <h3>What happens next?</h3>
             <p>
-              Saving creates a draft sales order only. After creation, the document still needs confirmation so the backend can reserve stock against warehouse and location allocations.
+              {isEdit ? 'Your changes will be saved to the draft. Confirm the order when ready to reserve stock.' : 'Saving creates a draft sales order only. After creation, the document still needs confirmation so the backend can reserve stock against warehouse and location allocations.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => navigate('/sales')} type="button" variant="ghost">
+            <Button onClick={() => navigate(isEdit ? `/sales/${id}` : '/sales')} type="button" variant="ghost">
               Cancel
             </Button>
             <Button disabled={isSaving} type="submit">
-              {isSaving ? 'Creating...' : 'Create sales order'}
+              {isSaving ? 'Saving...' : isEdit ? 'Update sales order' : 'Create sales order'}
             </Button>
           </div>
         </div>

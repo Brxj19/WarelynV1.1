@@ -1,5 +1,9 @@
 import { apiRequest } from './apiClient.js';
 
+export function listStock(accessToken) {
+  return apiRequest('/inventory/stock', { accessToken });
+}
+
 export function listInventoryBatches(accessToken) {
   return apiRequest('/inventory/batches', { accessToken });
 }

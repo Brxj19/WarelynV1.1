@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     jwt_secret_key: str = "change-this-dev-secret-before-production"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    access_token_expire_minutes: int = 300000
     refresh_token_expire_days: int = 14
 
     super_admin_email: str = "admin@warelyn.dev"

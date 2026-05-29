@@ -59,6 +59,7 @@ class PurchaseOrderRead(BaseModel):
     notes: str | None = None
     created_by: int
     submitted_at: datetime | None = None
+    approved_at: datetime | None = None
     received_at: datetime | None = None
     cancelled_at: datetime | None = None
     closed_at: datetime | None = None
@@ -125,6 +126,7 @@ class PurchaseReceiptRead(BaseModel):
     tenant_id: int
     purchase_order_id: int
     receipt_number: str
+    grn_number: str | None = None
     status: PurchaseReceiptStatus
     received_by: int
     received_at: datetime | None = None

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BackButton } from '../components/ui/BackButton.jsx';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { Button } from '../components/ui/Button.jsx';
@@ -20,6 +20,8 @@ const selectClass = 'block w-full rounded-lg border border-warelyn-border bg-whi
 const returnableStatuses = new Set(['PARTIALLY_FULFILLED', 'FULFILLED', 'CLOSED']);
 
 export function SalesReturnFormPage() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -55,6 +57,31 @@ export function SalesReturnFormPage() {
         setProductsById(Object.fromEntries(productRows.map((product) => [product.id, product])));
         setWarehouses(warehouseRows);
         setLocationsByWarehouse(Object.fromEntries(locationPairs));
+        if (isEdit) {
+          const existing = await returnsService.getSalesReturn(accessToken, id);
+          if (existing.status !== 'DRAFT') {
+            navigate(`/returns/${id}`, { replace: true });
+            return;
+          }
+          setForm({
+            sales_order_id: String(existing.sales_order_id),
+            return_number: existing.return_number,
+            reason: existing.reason || '',
+            notes: existing.notes || '',
+          });
+          const firstWarehouse = warehouseRows[0]?.id ? String(warehouseRows[0].id) : '';
+          const locMap = Object.fromEntries(locationPairs);
+          const firstLocation = firstWarehouse && locMap[firstWarehouse]?.[0]?.id ? String(locMap[firstWarehouse][0].id) : '';
+          setLines(existing.items.map((item) => ({
+            sales_order_item_id: item.sales_order_item_id,
+            warehouse_id: item.warehouse_id ? String(item.warehouse_id) : firstWarehouse,
+            location_id: item.location_id ? String(item.location_id) : firstLocation,
+            returned_quantity: String(item.returned_quantity),
+            batch_id: item.batch_id ? String(item.batch_id) : '',
+            serial_id: item.serial_id ? String(item.serial_id) : '',
+            include: true,
+          })));
+        }
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -62,7 +89,7 @@ export function SalesReturnFormPage() {
       }
     }
     load();
-  }, [accessToken]);
+  }, [accessToken, id]);
 
   const selectedOrder = orders.find((order) => String(order.id) === String(form.sales_order_id));
 
@@ -120,8 +147,13 @@ export function SalesReturnFormPage() {
             serial_id: line.serial_id ? Number(line.serial_id) : null,
           })),
       };
-      const created = await returnsService.createSalesReturn(accessToken, payload);
-      navigate(`/returns/${created.id}`);
+      let result;
+      if (isEdit) {
+        result = await returnsService.updateSalesReturn(accessToken, id, payload);
+      } else {
+        result = await returnsService.createSalesReturn(accessToken, payload);
+      }
+      navigate(`/returns/${result.id}`);
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -151,12 +183,12 @@ export function SalesReturnFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/returns" />
+      <BackButton to={isEdit ? `/returns/${id}` : '/returns'} />
       <PageHeader
-        backTo="/returns"
-        description="Create a return request from a fulfilled sales order. Inspection later determines whether stock is restocked, blocked, or rejected."
+        backTo={isEdit ? `/returns/${id}` : '/returns'}
+        description={isEdit ? 'Edit this draft return. Changes are saved when you click Update.' : 'Create a return request from a fulfilled sales order. Inspection later determines whether stock is restocked, blocked, or rejected.'}
         kicker="Returns"
-        title="Create sales return"
+        title={isEdit ? `Edit ${form.return_number || 'return'}` : 'Create sales return'}
       />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={submit}>
@@ -250,14 +282,14 @@ export function SalesReturnFormPage() {
         <div className="sticky-form-footer">
           <div className="workflow-helper-panel max-w-xl">
             <h3>What happens next?</h3>
-            <p>This creates the return document only. Inspection later decides whether returned quantity becomes sellable stock, blocked stock, or no stock movement at all.</p>
+            <p>{isEdit ? 'Your changes will be saved to the draft. Submit the return when ready for inspection.' : 'This creates the return document only. Inspection later decides whether returned quantity becomes sellable stock, blocked stock, or no stock movement at all.'}</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => navigate('/returns')} type="button" variant="ghost">
+            <Button onClick={() => navigate(isEdit ? `/returns/${id}` : '/returns')} type="button" variant="ghost">
               Cancel
             </Button>
             <Button disabled={isSaving} type="submit">
-              {isSaving ? 'Creating...' : 'Create return'}
+              {isSaving ? 'Saving...' : isEdit ? 'Update return' : 'Create return'}
             </Button>
           </div>
         </div>

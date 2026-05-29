@@ -118,6 +118,10 @@ class SalesService:
             self.db.commit()
         except Exception:
             pass
+        try:
+            self._auto_create_pick_task(tenant_id, actor_id, order)
+        except Exception:
+            pass
         return {"sales_order": self.get_sales_order(tenant_id, order.id), "fulfillment": None, "stock_results": stock_results}
 
     def cancel_sales_order(self, tenant_id: int, actor_id: int, order_id: int, values: dict[str, Any] | None = None) -> SalesOrder:
@@ -261,7 +265,26 @@ class SalesService:
             self.db.commit()
         except Exception:
             pass
+        try:
+            self._auto_create_invoice(tenant_id, actor_id, order)
+        except Exception:
+            pass
         return {"sales_order": self.get_sales_order(tenant_id, order.id), "fulfillment": self.get_fulfillment(tenant_id, fulfillment.id), "stock_results": stock_results}
+
+    def _auto_create_pick_task(self, tenant_id: int, actor_id: int, order: SalesOrder) -> None:
+        from app.services.fulfillment import FulfillmentService
+        import uuid
+        pick_number = f"PICK-{uuid.uuid4().hex[:8].upper()}"
+        FulfillmentService(self.db).create_pick_task(tenant_id, actor_id, order.id, {"pick_number": pick_number})
+
+    def _auto_create_invoice(self, tenant_id: int, actor_id: int, order: SalesOrder) -> None:
+        from app.services.documents import DocumentsService
+        from app.repositories.documents import DocumentsRepository
+        repo = DocumentsRepository(self.db)
+        existing = repo.get_invoice_for_sales_order(tenant_id, order.id)
+        if existing is not None:
+            return
+        DocumentsService(self.db).create_invoice(tenant_id, actor_id, {"sales_order_id": order.id})
 
     def _replace_order_items(self, tenant_id: int, order_id: int, items: list[dict[str, Any]]) -> None:
         seen_products = set()

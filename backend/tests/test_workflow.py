@@ -226,6 +226,7 @@ class TestPurchaseWorkflow:
         po_data = po.json()
 
         client.post(f"/api/purchase-orders/{po_data['id']}/submit", json={}, headers=h)
+        client.post(f"/api/purchase-orders/{po_data['id']}/approve", json={}, headers=h)
 
         receipt = client.post(f"/api/purchase-orders/{po_data['id']}/receipts", json={
             "receipt_number": "GRN-WFT-1",

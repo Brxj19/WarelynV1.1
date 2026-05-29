@@ -373,6 +373,10 @@ class DocumentsService:
         if fulfillment and order is None:
             order = self.repository.get_sales_order(tenant_id, fulfillment.sales_order_id)
         assert order is not None
+        existing_invoice = self.repository.get_invoice_for_sales_order(tenant_id, order.id)
+        if existing_invoice is not None:
+            raise AppError("INVOICE_ALREADY_EXISTS", "An invoice has already been generated for this sales order.", 409)
+        assert order is not None
         customer = self.repository.get_customer(tenant_id, order.customer_id)
         if customer is None:
             raise AppError("CUSTOMER_NOT_FOUND", "Customer was not found for this tenant.", 404)
@@ -469,6 +473,10 @@ class DocumentsService:
             raise AppError("PURCHASE_RECEIPT_NOT_FOUND", "Purchase receipt was not found for this tenant.", 404)
         if receipt and po is None:
             po = self.repository.get_purchase_order(tenant_id, receipt.purchase_order_id)
+        assert po is not None
+        existing_bill = self.repository.get_bill_for_purchase_order(tenant_id, po.id)
+        if existing_bill is not None:
+            raise AppError("BILL_ALREADY_EXISTS", "A bill has already been generated for this purchase order.", 409)
         assert po is not None
         vendor = self.repository.get_vendor(tenant_id, po.vendor_id)
         if vendor is None:
@@ -606,11 +614,20 @@ class DocumentsService:
 
     def mark_invoice_paid(self, tenant_id: int, invoice_id: int, actor_user_id: int) -> Invoice:
         invoice = self.get_invoice(tenant_id, invoice_id)
+        if invoice.status == InvoiceStatus.PAID:
+            raise AppError("INVALID_INVOICE_STATE", "This invoice has already been marked as paid.", 409)
         if invoice.status == InvoiceStatus.VOID:
             raise AppError("INVALID_INVOICE_STATE", "Void invoices cannot be marked as paid.", 409)
         invoice.status = InvoiceStatus.PAID
         invoice.paid_at = _naive_utcnow()
-        return self._commit_and_refresh_invoice(tenant_id, invoice.id, "INVOICE_PAID", actor_user_id)
+        result = self._commit_and_refresh_invoice(tenant_id, invoice.id, "INVOICE_PAID", actor_user_id)
+        try:
+            if invoice.sales_order_id:
+                WorkflowService(self.db).cancel_entity_tasks(tenant_id, "sales_order", invoice.sales_order_id)
+                self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def void_invoice(self, tenant_id: int, invoice_id: int, actor_user_id: int) -> Invoice:
         invoice = self.get_invoice(tenant_id, invoice_id)
@@ -622,11 +639,22 @@ class DocumentsService:
 
     def mark_bill_paid(self, tenant_id: int, bill_id: int, actor_user_id: int) -> Bill:
         bill = self.get_bill(tenant_id, bill_id)
+        if bill.status == BillStatus.PAID:
+            raise AppError("INVALID_BILL_STATE", "This bill has already been marked as paid.", 409)
         if bill.status == BillStatus.VOID:
             raise AppError("INVALID_BILL_STATE", "Void bills cannot be marked as paid.", 409)
         bill.status = BillStatus.PAID
         bill.paid_at = _naive_utcnow()
-        return self._commit_and_refresh_bill(tenant_id, bill.id, "BILL_PAID", actor_user_id)
+        result = self._commit_and_refresh_bill(tenant_id, bill.id, "BILL_PAID", actor_user_id)
+        try:
+            from app.services.purchasing import PurchasingService
+            if bill.purchase_order_id:
+                WorkflowService(self.db).cancel_entity_tasks(tenant_id, "purchase_order", bill.purchase_order_id)
+                self.db.commit()
+                PurchasingService(self.db)._try_auto_close(tenant_id, bill.purchase_order_id)
+        except Exception:
+            pass
+        return result
 
     def void_bill(self, tenant_id: int, bill_id: int, actor_user_id: int) -> Bill:
         bill = self.get_bill(tenant_id, bill_id)

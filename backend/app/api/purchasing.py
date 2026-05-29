@@ -47,6 +47,11 @@ def submit_purchase_order(po_id: int, context: UserContext = Depends(require_rol
     return PurchasingService(db).submit_purchase_order(context.tenant_id, po_id)
 
 
+@router.post("/purchase-orders/{po_id}/approve", response_model=PurchaseOrderRead)
+def approve_purchase_order(po_id: int, context: UserContext = Depends(require_roles(UserRole.TENANT_ADMIN)), db: Session = Depends(get_db)) -> PurchaseOrderRead:
+    return PurchasingService(db).approve_purchase_order(context.tenant_id, po_id, context.user.id)
+
+
 @router.post("/purchase-orders/{po_id}/cancel", response_model=PurchaseOrderRead)
 def cancel_purchase_order(po_id: int, context: UserContext = Depends(require_roles(*writer_roles)), db: Session = Depends(get_db)) -> PurchaseOrderRead:
     return PurchasingService(db).cancel_purchase_order(context.tenant_id, po_id)

@@ -82,6 +82,9 @@ const LazyWarehousesPage = lazy(() => import('../pages/WarehousesPage.jsx').then
 const LazyWarehouseFormPage = lazy(() => import('../pages/WarehousesPage.jsx').then(m => ({ default: m.WarehouseFormPage })));
 const LazyPutawayTasksPage = lazy(() => import('../pages/PutawayTasksPage.jsx').then(m => ({ default: m.PutawayTasksPage })));
 const LazyPutawayTaskDetailPage = lazy(() => import('../pages/PutawayTasksPage.jsx').then(m => ({ default: m.PutawayTaskDetailPage })));
+const LazyCycleCountsPage = lazy(() => import('../pages/CycleCountPages.jsx').then(m => ({ default: m.CycleCountsPage })));
+const LazyCycleCountFormPage = lazy(() => import('../pages/CycleCountPages.jsx').then(m => ({ default: m.CycleCountFormPage })));
+const LazyCycleCountDetailPage = lazy(() => import('../pages/CycleCountPages.jsx').then(m => ({ default: m.CycleCountDetailPage })));
 const LazyProductsPage = lazy(() => import('../pages/CatalogMasterPages.jsx').then(m => ({ default: m.ProductsPage })));
 const LazyProductFormPage = lazy(() => import('../pages/CatalogMasterPages.jsx').then(m => ({ default: m.ProductFormPage })));
 const LazyCategoriesPage = lazy(() => import('../pages/CatalogMasterPages.jsx').then(m => ({ default: m.CategoriesPage })));
@@ -119,8 +122,12 @@ export function AppRoutes() {
             <Route path="warehouses/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER']}><WarehouseDetailPage /></RoleGuard>} />
             <Route path="putaway-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyPutawayTasksPage /></RoleGuard>} />
             <Route path="putaway-tasks/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyPutawayTaskDetailPage /></RoleGuard>} />
+            <Route path="cycle-counts" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyCycleCountsPage /></RoleGuard>} />
+            <Route path="cycle-counts/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyCycleCountFormPage /></RoleGuard>} />
+            <Route path="cycle-counts/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyCycleCountDetailPage /></RoleGuard>} />
             <Route path="purchases" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'VIEWER']}><PurchasesPage /></RoleGuard>} />
             <Route path="purchases/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF']}><PurchaseOrderFormPage /></RoleGuard>} />
+            <Route path="purchases/:id/edit" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF']}><PurchaseOrderFormPage /></RoleGuard>} />
             <Route path="purchases/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'VIEWER']}><PurchaseOrderDetailPage /></RoleGuard>} />
             <Route path="purchases/:id/receive" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF']}><PurchaseReceivePage /></RoleGuard>} />
             <Route path="purchase-receipts" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'VIEWER']}><LazyPurchaseReceiptsPage /></RoleGuard>} />
@@ -128,6 +135,7 @@ export function AppRoutes() {
             <Route path="purchase-receipts/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'VIEWER']}><PurchaseReceiptDetailPage /></RoleGuard>} />
             <Route path="sales" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER']}><SalesPage /></RoleGuard>} />
             <Route path="sales/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesOrderFormPage /></RoleGuard>} />
+            <Route path="sales/:id/edit" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesOrderFormPage /></RoleGuard>} />
             <Route path="sales/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER']}><SalesOrderDetailPage /></RoleGuard>} />
             <Route path="sales/:id/pick" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesPickPage /></RoleGuard>} />
             <Route path="sales/:id/package" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesPackagePage /></RoleGuard>} />
@@ -135,6 +143,7 @@ export function AppRoutes() {
             <Route path="returns" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER']}><ReturnsPage /></RoleGuard>} />
             <Route path="returns/qc" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><ReturnsPage mode="qc" /></RoleGuard>} />
             <Route path="returns/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnFormPage /></RoleGuard>} />
+            <Route path="returns/:id/edit" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnFormPage /></RoleGuard>} />
             <Route path="returns/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'VIEWER']}><SalesReturnDetailPage /></RoleGuard>} />
             <Route path="returns/:id/inspect" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><SalesReturnInspectPage /></RoleGuard>} />
             <Route path="pick-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']}><PickTasksPage /></RoleGuard>} />

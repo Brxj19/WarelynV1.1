@@ -11,6 +11,7 @@ from app.db.base import Base
 class NumberSequenceKey(str, enum.Enum):
     INVOICE = "INVOICE"
     BILL = "BILL"
+    GRN = "GRN"
 
 
 class DocumentTemplateChannel(str, enum.Enum):

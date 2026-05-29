@@ -19,9 +19,9 @@ import * as purchasingService from '../services/purchasingService.js';
 import * as documentService from '../services/documentService.js';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF']);
-const receivableStatuses = new Set(['SUBMITTED', 'PARTIALLY_RECEIVED']);
-const statusTone = { DRAFT: 'neutral', SUBMITTED: 'primary', PARTIALLY_RECEIVED: 'warning', RECEIVED: 'success', CANCELLED: 'danger', CLOSED: 'neutral' };
-const purchaseSteps = [{ key: 'DRAFT', label: 'Draft' }, { key: 'SUBMITTED', label: 'Submitted' }, { key: 'PARTIALLY_RECEIVED', label: 'Receiving' }, { key: 'RECEIVED', label: 'Received / Closed', matches: ['RECEIVED', 'CLOSED'] }];
+const receivableStatuses = new Set(['APPROVED', 'PARTIALLY_RECEIVED']);
+const statusTone = { DRAFT: 'neutral', SUBMITTED: 'primary', APPROVED: 'success', PARTIALLY_RECEIVED: 'warning', RECEIVED: 'success', CANCELLED: 'danger', CLOSED: 'neutral' };
+const purchaseSteps = [{ key: 'DRAFT', label: 'Draft' }, { key: 'SUBMITTED', label: 'Submitted' }, { key: 'APPROVED', label: 'Approved' }, { key: 'PARTIALLY_RECEIVED', label: 'Receiving' }, { key: 'RECEIVED', label: 'Received / Closed', matches: ['RECEIVED', 'CLOSED'] }];
 
 export function PurchaseOrderDetailPage() {
   const { id } = useParams();
@@ -30,6 +30,8 @@ export function PurchaseOrderDetailPage() {
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [receipts, setReceipts] = useState([]);
+  const [hasBill, setHasBill] = useState(false);
+  const [billData, setBillData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -40,9 +42,16 @@ export function PurchaseOrderDetailPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [orderRow, receiptRows] = await Promise.all([purchasingService.getPurchaseOrder(accessToken, id), purchasingService.listPurchaseReceipts(accessToken, id)]);
+      const [orderRow, receiptRows, bills] = await Promise.all([
+        purchasingService.getPurchaseOrder(accessToken, id),
+        purchasingService.listPurchaseReceipts(accessToken, id),
+        documentService.listBills(accessToken),
+      ]);
       setOrder(orderRow);
       setReceipts(receiptRows);
+      const matchedBill = bills.find((b) => b.purchase_order_id === Number(id) && b.status !== 'VOID');
+      setHasBill(Boolean(matchedBill));
+      setBillData(matchedBill || null);
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -94,15 +103,18 @@ export function PurchaseOrderDetailPage() {
       <RecordDetailShell
         actions={
           <div className="flex flex-wrap gap-2">
-            {mayWrite && order.status === 'DRAFT' ? <Button disabled={isSaving} onClick={() => setPendingAction({ action: purchasingService.submitPurchaseOrder, description: 'Submit this purchase order for receiving. Stock will not change until a receipt is committed.', label: 'Submit order', variant: 'primary' })}>Submit</Button> : null}
+            {mayWrite && order.status === 'DRAFT' ? <Link to={`/purchases/${order.id}/edit`}><Button variant="secondary">Edit</Button></Link> : null}
+            {mayWrite && order.status === 'DRAFT' ? <Button disabled={isSaving} onClick={() => setPendingAction({ action: purchasingService.submitPurchaseOrder, description: 'Submit this purchase order for approval. Receiving is blocked until approved.', label: 'Submit order', variant: 'primary' })}>Submit</Button> : null}
+            {user?.role === 'TENANT_ADMIN' && order.status === 'SUBMITTED' ? <Button disabled={isSaving} variant="accent" onClick={() => setPendingAction({ action: purchasingService.approvePurchaseOrder, description: 'Approve this purchase order. Once approved, stock can be received against it.', label: 'Approve order', variant: 'accent' })}>Approve</Button> : null}
             {mayWrite && ['DRAFT', 'SUBMITTED'].includes(order.status) ? <Button disabled={isSaving} variant="danger" onClick={() => setPendingAction({ action: purchasingService.cancelPurchaseOrder, description: 'Cancel this purchase order. Existing committed receipts are not reversed by this action.', label: 'Cancel order', variant: 'danger' })}>Cancel</Button> : null}
-            {mayWrite && ['SUBMITTED', 'PARTIALLY_RECEIVED'].includes(order.status) ? <Button disabled={isSaving} variant="secondary" onClick={() => setPendingAction({ action: purchasingService.closePurchaseOrder, description: 'Close this purchase order to stop further receiving against it.', label: 'Close order', variant: 'secondary' })}>Close</Button> : null}
+            {mayWrite && ['APPROVED', 'PARTIALLY_RECEIVED'].includes(order.status) ? <Button disabled={isSaving} variant="secondary" onClick={() => setPendingAction({ action: purchasingService.closePurchaseOrder, description: 'Close this purchase order to stop further receiving against it.', label: 'Close order', variant: 'secondary' })}>Close</Button> : null}
             {mayWrite && receivableStatuses.has(order.status) ? <Link to={`/purchases/${order.id}/receive`}><Button variant="accent">Receive</Button></Link> : null}
-            {mayWrite ? <Button disabled={isSaving} variant="secondary" onClick={generateBillFromOrder}>Generate bill</Button> : null}
+            {mayWrite && !hasBill && ['RECEIVED', 'PARTIALLY_RECEIVED'].includes(order.status) ? <Button disabled={isSaving} variant="secondary" onClick={generateBillFromOrder}>Generate bill</Button> : null}
+            {hasBill && billData ? <Link to={`/bills/${billData.id}`}><span className="inline-flex items-center rounded-lg bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 transition">{billData.bill_number} — {billData.status}</span></Link> : null}
           </div>
         }
         backTo="/purchases"
-        description={`Order date ${formatDate(order.order_date)}. Stock changes only through committed purchase receipts.`}
+        description={`Order date ${formatDate(order.order_date)}. Approval required before receiving. Stock changes only through committed receipts.`}
         kicker="Purchase order"
         meta={[
           { label: 'Vendor', value: order.vendor_id ? `Vendor #${order.vendor_id}` : '-' },

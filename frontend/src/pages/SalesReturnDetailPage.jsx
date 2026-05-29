@@ -92,6 +92,11 @@ export function SalesReturnDetailPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             {canWrite.has(user?.role) && salesReturn.status === 'DRAFT' ? (
+              <Link to={`/returns/${salesReturn.id}/edit`}>
+                <Button variant="secondary">Edit</Button>
+              </Link>
+            ) : null}
+            {canWrite.has(user?.role) && salesReturn.status === 'DRAFT' ? (
               <Button disabled={isSaving} onClick={() => run(returnsService.submitSalesReturn)}>
                 Submit
               </Button>

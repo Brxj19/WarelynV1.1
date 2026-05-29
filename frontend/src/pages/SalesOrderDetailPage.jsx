@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as catalogService from '../services/catalogService.js';
 import * as fulfillmentService from '../services/fulfillmentService.js';
+import * as inventoryService from '../services/inventoryService.js';
 import * as salesService from '../services/salesService.js';
 import * as warehouseService from '../services/warehouseService.js';
 import * as documentService from '../services/documentService.js';
@@ -44,6 +45,8 @@ export function SalesOrderDetailPage() {
   const [fulfillments, setFulfillments] = useState([]);
   const [pickTasks, setPickTasks] = useState([]);
   const [packages, setPackages] = useState([]);
+  const [hasInvoice, setHasInvoice] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(null);
   const [productsById, setProductsById] = useState({});
   const [warehouses, setWarehouses] = useState([]);
   const [locationsByWarehouse, setLocationsByWarehouse] = useState({});
@@ -60,43 +63,72 @@ export function SalesOrderDetailPage() {
     setIsLoading(true);
     setError('');
     try {
-      const [orderRow, fulfillmentRows, pickRows, packageRows, productRows, warehouseRows] = await Promise.all([
+      const [orderRow, fulfillmentRows, pickRows, packageRows, productRows, warehouseRows, invoices, stockRows] = await Promise.all([
         salesService.getSalesOrder(accessToken, id),
         salesService.listSalesFulfillments(accessToken, id),
         fulfillmentService.listPickTasksForOrder(accessToken, id),
         fulfillmentService.listPackagesForOrder(accessToken, id),
         catalogService.listProducts(accessToken),
         warehouseService.listWarehouses(accessToken),
+        documentService.listInvoices(accessToken),
+        inventoryService.listStock(accessToken),
       ]);
       const locationPairs = await Promise.all(
         warehouseRows.map(async (warehouse) => [warehouse.id, await warehouseService.listWarehouseLocations(accessToken, warehouse.id)]),
       );
       const locationMap = Object.fromEntries(locationPairs);
-      const defaultWarehouse = warehouseRows[0]?.id ? String(warehouseRows[0].id) : '';
-      const defaultLocation =
-        defaultWarehouse && locationMap[defaultWarehouse]?.[0]?.id
-          ? String(locationMap[defaultWarehouse][0].id)
-          : '';
       setOrder(orderRow);
       setFulfillments(fulfillmentRows);
       setPickTasks(pickRows);
       setPackages(packageRows);
+      const matchedInvoice = invoices.find((inv) => inv.sales_order_id === Number(id) && inv.status !== 'VOID');
+      setHasInvoice(Boolean(matchedInvoice));
+      setInvoiceData(matchedInvoice || null);
       setProductsById(Object.fromEntries(productRows.map((product) => [product.id, product])));
       setWarehouses(warehouseRows);
       setLocationsByWarehouse(locationMap);
-      setAllocations(
-        orderRow.items.map((item) => ({
-          sales_order_item_id: item.id,
-          warehouse_id: defaultWarehouse,
-          location_id: defaultLocation,
-          quantity: item.ordered_quantity,
-        })),
-      );
+      setAllocations(buildAllocationsFromStock(orderRow.items, stockRows));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function buildAllocationsFromStock(orderItems, stockRows) {
+    const availableStock = stockRows
+      .filter((s) => Number(s.quantity_available) > 0)
+      .map((s) => ({ ...s, remaining: Number(s.quantity_available) }));
+
+    return orderItems.map((item) => {
+      const needed = Number(item.ordered_quantity);
+      const match = availableStock.find((s) => s.product_id === item.product_id && s.remaining >= needed);
+      if (match) {
+        match.remaining -= needed;
+        return {
+          sales_order_item_id: item.id,
+          warehouse_id: String(match.warehouse_id),
+          location_id: String(match.location_id),
+          quantity: item.ordered_quantity,
+        };
+      }
+      const partialMatch = availableStock.find((s) => s.product_id === item.product_id && s.remaining > 0);
+      if (partialMatch) {
+        partialMatch.remaining -= needed;
+        return {
+          sales_order_item_id: item.id,
+          warehouse_id: String(partialMatch.warehouse_id),
+          location_id: String(partialMatch.location_id),
+          quantity: item.ordered_quantity,
+        };
+      }
+      return {
+        sales_order_item_id: item.id,
+        warehouse_id: '',
+        location_id: '',
+        quantity: item.ordered_quantity,
+      };
+    });
   }
 
   useEffect(() => {
@@ -151,18 +183,7 @@ export function SalesOrderDetailPage() {
     }
   }
 
-  async function generateInvoiceFromOrder() {
-    setIsSaving(true);
-    setError('');
-    try {
-      const invoice = await documentService.createInvoice(accessToken, { sales_order_id: Number(id) });
-      navigate(`/invoices/${invoice.id}`);
-    } catch (actionError) {
-      setError(actionError.message);
-    } finally {
-      setIsSaving(false);
-    }
-  }
+
 
   if (isLoading) return <LoadingState />;
   if (!order) return <ErrorState description={error || 'Sales order not found.'} />;
@@ -248,22 +269,13 @@ export function SalesOrderDetailPage() {
                 <Button variant="secondary">Pick</Button>
               </Link>
             ) : null}
-            {fulfillableStatuses.has(order.status) ? (
-              <Link to={`/sales/${order.id}/package`}>
-                <Button variant="secondary">Pack</Button>
-              </Link>
-            ) : null}
-            {mayWrite && fulfillableStatuses.has(order.status) ? (
-              <Link to={`/sales/${order.id}/fulfill`}>
-                <Button variant="accent">Fulfill</Button>
-              </Link>
-            ) : null}
             {mayWrite && ['PARTIALLY_FULFILLED', 'FULFILLED', 'CLOSED'].includes(order.status) ? (
               <Link to={`/returns/new?sales_order_id=${order.id}`}>
                 <Button variant="secondary">Create return</Button>
               </Link>
             ) : null}
-            {mayWrite ? <Button disabled={isSaving} variant="secondary" onClick={generateInvoiceFromOrder}>Generate invoice</Button> : null}
+            {mayWrite && order.status === 'DRAFT' ? <Link to={`/sales/${order.id}/edit`}><Button variant="secondary">Edit</Button></Link> : null}
+            {hasInvoice && invoiceData ? <Link to={`/invoices/${invoiceData.id}`}><span className="inline-flex items-center rounded-lg bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-100 transition">{invoiceData.invoice_number} — {invoiceData.status}</span></Link> : null}
           </div>
         }
         backTo="/sales"

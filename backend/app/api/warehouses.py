@@ -10,7 +10,7 @@ from app.services.master_data import WarehouseService
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 writer_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER)
-reader_roles = (*writer_roles, UserRole.VIEWER, UserRole.PURCHASE_STAFF)
+reader_roles = (*writer_roles, UserRole.VIEWER, UserRole.PURCHASE_STAFF, UserRole.SALES_STAFF)
 
 
 @router.get("", response_model=list[WarehouseRead])

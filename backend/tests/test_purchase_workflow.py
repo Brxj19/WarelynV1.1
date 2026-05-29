@@ -47,6 +47,9 @@ def create_and_commit_receipt(client: TestClient, token: str, dimension: dict[st
     submit_resp = client.post(f"/api/purchase-orders/{po['id']}/submit", json={}, headers=headers)
     assert submit_resp.status_code == 200
 
+    approve_resp = client.post(f"/api/purchase-orders/{po['id']}/approve", json={}, headers=headers)
+    assert approve_resp.status_code == 200
+
     receipt_resp = client.post(f"/api/purchase-orders/{po['id']}/receipts", json={
         "receipt_number": "GRN-PW-1",
         "items": [{"purchase_order_item_id": po["items"][0]["id"], "product_id": dimension["product_id"], "warehouse_id": dimension["warehouse_id"], "location_id": dimension["location_id"], "received_quantity": "5"}],

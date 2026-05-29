@@ -11,6 +11,7 @@ from app.db.base import Base
 class PurchaseOrderStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
+    APPROVED = "APPROVED"
     PARTIALLY_RECEIVED = "PARTIALLY_RECEIVED"
     RECEIVED = "RECEIVED"
     CANCELLED = "CANCELLED"
@@ -37,6 +38,7 @@ class PurchaseOrder(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -72,6 +74,7 @@ class PurchaseReceipt(Base):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
     purchase_order_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id", ondelete="RESTRICT"), nullable=False, index=True)
     receipt_number: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    grn_number: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     status: Mapped[PurchaseReceiptStatus] = mapped_column(Enum(PurchaseReceiptStatus, name="purchase_receipt_status", native_enum=False), default=PurchaseReceiptStatus.DRAFT, nullable=False, index=True)
     received_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

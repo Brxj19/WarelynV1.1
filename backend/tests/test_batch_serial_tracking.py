@@ -96,8 +96,9 @@ def test_purchase_receipt_commit_creates_batch_and_serial_records(client: TestCl
         headers=headers,
     ).json()
     submitted = client.post(f"/api/purchase-orders/{po['id']}/submit", json={}, headers=headers).json()
+    approved = client.post(f"/api/purchase-orders/{submitted['id']}/approve", json={}, headers=headers).json()
     receipt = client.post(
-        f"/api/purchase-orders/{submitted['id']}/receipts",
+        f"/api/purchase-orders/{approved['id']}/receipts",
         json={
             "receipt_number": "GRN-TRACK",
             "items": [

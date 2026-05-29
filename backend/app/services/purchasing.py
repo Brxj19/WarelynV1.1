@@ -6,14 +6,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.models.documents import NumberSequenceKey
 from app.models.inventory import ReferenceType
+from app.models.operations import PutawayTaskStatus
 from app.models.purchasing import PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, PurchaseReceipt, PurchaseReceiptStatus
+from app.repositories.documents import DocumentsRepository
 from app.repositories.purchasing import PurchasingRepository
 from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
 from app.services.workflow import WorkflowService
 
-RECEIVABLE_STATUSES = {PurchaseOrderStatus.SUBMITTED, PurchaseOrderStatus.PARTIALLY_RECEIVED}
+RECEIVABLE_STATUSES = {PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIALLY_RECEIVED}
 
 
 class PurchasingService:
@@ -64,18 +67,33 @@ class PurchasingService:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "PURCHASE_ORDER_SUBMITTED", "purchase_order", po.id, None, {"po_number": po.po_number})
             total_value = sum((item.unit_cost or Decimal("0")) * item.ordered_quantity for item in result.items)
-            if total_value > Decimal("10000"):
-                workflow.create_task(tenant_id, WorkflowTaskCreate(
-                    workflow_type="PURCHASING",
-                    entity_type="purchase_order",
-                    entity_id=po.id,
-                    step_key="APPROVE_PO",
-                    title=f"Approve high-value PO {po.po_number}",
-                    description=f"Purchase order total {total_value} exceeds approval threshold.",
-                    assigned_role="TENANT_ADMIN",
-                    priority="HIGH",
-                    action_url=f"/purchases/{po.id}",
-                ))
+            workflow.create_task(tenant_id, WorkflowTaskCreate(
+                workflow_type="PURCHASING",
+                entity_type="purchase_order",
+                entity_id=po.id,
+                step_key="APPROVE_PO",
+                title=f"Approve PO {po.po_number}" + (f" (₹{total_value:,.0f})" if total_value > Decimal("10000") else ""),
+                description=f"Purchase order {po.po_number} submitted for approval. Total value: ₹{total_value:,.2f}.",
+                assigned_role="TENANT_ADMIN",
+                priority="HIGH" if total_value > Decimal("10000") else "NORMAL",
+                action_url=f"/purchases/{po.id}",
+            ))
+            self.db.commit()
+        except Exception:
+            pass
+        return result
+
+    def approve_purchase_order(self, tenant_id: int, po_id: int, actor_id: int) -> PurchaseOrder:
+        po = self.get_purchase_order(tenant_id, po_id)
+        if po.status != PurchaseOrderStatus.SUBMITTED:
+            raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only submitted purchase orders can be approved.", 409)
+        po.status = PurchaseOrderStatus.APPROVED
+        po.approved_at = datetime.now(UTC)
+        result = self._commit_and_get_po(tenant_id, po.id)
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "PURCHASE_ORDER_APPROVED", "purchase_order", po.id, actor_id, {"po_number": po.po_number})
+            workflow.cancel_entity_tasks(tenant_id, "purchase_order", po.id)
             self.db.commit()
         except Exception:
             pass
@@ -87,12 +105,18 @@ class PurchasingService:
             raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only draft or submitted purchase orders can be cancelled.", 409)
         po.status = PurchaseOrderStatus.CANCELLED
         po.cancelled_at = datetime.now(UTC)
-        return self._commit_and_get_po(tenant_id, po.id)
+        result = self._commit_and_get_po(tenant_id, po.id)
+        try:
+            WorkflowService(self.db).cancel_entity_tasks(tenant_id, "purchase_order", po.id)
+            self.db.commit()
+        except Exception:
+            pass
+        return result
 
     def close_purchase_order(self, tenant_id: int, po_id: int) -> PurchaseOrder:
         po = self.get_purchase_order(tenant_id, po_id)
-        if po.status not in {PurchaseOrderStatus.SUBMITTED, PurchaseOrderStatus.PARTIALLY_RECEIVED}:
-            raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only submitted or partially received purchase orders can be closed.", 409)
+        if po.status not in {PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIALLY_RECEIVED}:
+            raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only approved or partially received purchase orders can be closed.", 409)
         po.status = PurchaseOrderStatus.CLOSED
         po.closed_at = datetime.now(UTC)
         return self._commit_and_get_po(tenant_id, po.id)
@@ -152,6 +176,9 @@ class PurchasingService:
         receipt = self.get_receipt(tenant_id, receipt_id)
         if not receipt.items:
             raise AppError("PURCHASE_RECEIPT_ITEMS_REQUIRED", "Purchase receipt must include at least one item before commit.", 400)
+
+        grn_number = self._generate_grn_number(tenant_id)
+
         stock_results = []
         try:
             for item in receipt.items:
@@ -176,7 +203,7 @@ class PurchasingService:
                         "warranty_until": item.warranty_until,
                         "serial_numbers": item.serial_numbers,
                         "reference_type": ReferenceType.PURCHASE_RECEIPT,
-                        "reference_id": receipt.receipt_number,
+                        "reference_id": grn_number,
                         "note": values.get("note") or receipt.notes,
                         "idempotency_key": f"{values['idempotency_key']}:receipt:{receipt.id}:item:{item.id}",
                     },
@@ -185,6 +212,7 @@ class PurchasingService:
                 stock_results.append(result)
                 po_item.received_quantity += item.received_quantity
             receipt.status = PurchaseReceiptStatus.COMMITTED
+            receipt.grn_number = grn_number
             now = datetime.now(UTC)
             receipt.committed_at = now
             receipt.received_at = receipt.received_at or now
@@ -196,24 +224,108 @@ class PurchasingService:
         except IntegrityError as exc:
             self.db.rollback()
             raise AppError("PURCHASE_RECEIPT_COMMIT_FAILED", "Purchase receipt commit failed because of duplicate or invalid data.", 409) from exc
+
+        # Auto-create putaway tasks per receipt line
         try:
-            workflow = WorkflowService(self.db)
-            workflow.log_event(tenant_id, "RECEIPT_COMMITTED", "purchase_receipt", receipt.id, actor_id, {"po_number": po.po_number, "receipt_number": receipt.receipt_number})
-            workflow.create_task(tenant_id, WorkflowTaskCreate(
-                workflow_type="PURCHASING",
-                entity_type="purchase_receipt",
-                entity_id=receipt.id,
-                step_key="PUTAWAY_STOCK",
-                title=f"Putaway received stock for PO {po.po_number}",
-                description="Receipt committed. Move stock to designated storage locations.",
-                assigned_role="INVENTORY_MANAGER",
-                priority="NORMAL",
-                action_url=f"/putaway-tasks",
-            ), created_by=actor_id)
+            self._auto_create_putaway_tasks(tenant_id, receipt, po)
             self.db.commit()
         except Exception:
             pass
+
+        # Workflow events and tasks
+        try:
+            workflow = WorkflowService(self.db)
+            workflow.log_event(tenant_id, "RECEIPT_COMMITTED", "purchase_receipt", receipt.id, actor_id, {"po_number": po.po_number, "receipt_number": receipt.receipt_number, "grn_number": grn_number})
+            self.db.commit()
+        except Exception:
+            pass
+
+        # Check auto-close
+        try:
+            self._try_auto_close(tenant_id, po.id)
+        except Exception:
+            pass
+
         return {"purchase_order": self.get_purchase_order(tenant_id, po.id), "receipt": self.get_receipt(tenant_id, receipt.id), "stock_results": stock_results}
+
+    def _auto_create_putaway_tasks(self, tenant_id: int, receipt: PurchaseReceipt, po: PurchaseOrder) -> None:
+        from app.repositories.operations import PutawayTaskRepository
+        from app.models.operations import PutawayTask
+        from app.models.master_data import WarehouseLocation, LocationType
+        from sqlalchemy import select
+
+        putaway_repo = PutawayTaskRepository(self.db)
+        workflow = WorkflowService(self.db)
+
+        for item in receipt.items:
+            # Find a suggested storage location in the same warehouse (prefer STORAGE type)
+            suggested_to = self.db.scalar(
+                select(WarehouseLocation).where(
+                    WarehouseLocation.tenant_id == tenant_id,
+                    WarehouseLocation.warehouse_id == item.warehouse_id,
+                    WarehouseLocation.location_type == LocationType.STORAGE,
+                ).limit(1)
+            )
+            to_location_id = suggested_to.id if suggested_to else None
+
+            putaway_repo.create({
+                "tenant_id": tenant_id,
+                "product_id": item.product_id,
+                "warehouse_id": item.warehouse_id,
+                "from_location_id": item.location_id,
+                "to_location_id": to_location_id,
+                "quantity": item.received_quantity,
+                "status": PutawayTaskStatus.PENDING,
+                "receipt_id": receipt.id,
+            })
+
+        workflow.create_task(tenant_id, WorkflowTaskCreate(
+            workflow_type="PURCHASING",
+            entity_type="purchase_receipt",
+            entity_id=receipt.id,
+            step_key="PUTAWAY_STOCK",
+            title=f"Putaway received stock — GRN {receipt.grn_number}",
+            description=f"Receipt committed for PO {po.po_number}. Move stock from receiving to storage locations.",
+            assigned_role="INVENTORY_MANAGER",
+            priority="NORMAL",
+            action_url="/putaway-tasks",
+        ))
+
+    def _generate_grn_number(self, tenant_id: int) -> str:
+        docs_repo = DocumentsRepository(self.db)
+        seq = docs_repo.get_or_create_sequence(tenant_id, NumberSequenceKey.GRN, "GRN-", 5)
+        number = seq.next_number
+        seq.next_number += 1
+        self.db.flush()
+        return f"{seq.prefix}{str(number).zfill(seq.padding)}"
+
+    def _try_auto_close(self, tenant_id: int, po_id: int) -> None:
+        """Auto-close PO if fully received and all committed receipts have bills."""
+        po = self.get_purchase_order(tenant_id, po_id)
+        if po.status != PurchaseOrderStatus.RECEIVED:
+            return
+        # Check if all committed receipts have associated bills
+        from app.repositories.documents import DocumentsRepository
+        from app.models.documents import Bill, BillStatus
+        from sqlalchemy import select
+        receipts = self.repository.list_receipts_for_order(tenant_id, po_id)
+        committed_receipts = [r for r in receipts if r.status == PurchaseReceiptStatus.COMMITTED]
+        if not committed_receipts:
+            return
+        for receipt in committed_receipts:
+            bill = self.db.scalar(
+                select(Bill).where(
+                    Bill.tenant_id == tenant_id,
+                    Bill.receipt_id == receipt.id,
+                    Bill.status != BillStatus.VOID,
+                )
+            )
+            if bill is None:
+                return
+        # All receipts have bills — auto-close
+        po.status = PurchaseOrderStatus.CLOSED
+        po.closed_at = datetime.now(UTC)
+        self.db.commit()
 
     def _replace_order_items(self, tenant_id: int, po_id: int, items: list[dict[str, Any]]) -> None:
         for item in items:
@@ -249,7 +361,7 @@ class PurchasingService:
 
     def _require_receivable(self, po: PurchaseOrder) -> None:
         if po.status not in RECEIVABLE_STATUSES:
-            raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only submitted or partially received purchase orders can be received.", 409)
+            raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only approved or partially received purchase orders can be received.", 409)
 
     def _require_vendor(self, tenant_id: int, vendor_id: int) -> None:
         if self.repository.get_vendor(tenant_id, vendor_id) is None:
