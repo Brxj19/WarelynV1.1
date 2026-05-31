@@ -104,7 +104,7 @@ export function SalesPackagePage() {
           ) : null
         }
         backTo="/sales"
-        description="Packages group already-picked items into shipping-ready units. Packing does not create ledger entries on its own."
+        description="Packages may be auto-created as drafts after picking. Review lines and pack manually; packing does not create ledger entries."
         kicker="Packing"
         status={<StatusBadge status={order.status}>{order.status}</StatusBadge>}
         title={`Package ${order.order_number}`}

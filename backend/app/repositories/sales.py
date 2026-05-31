@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.inventory import ReservationStatus, StockReservation
 from app.models.master_data import Customer, Product, Warehouse, WarehouseLocation
-from app.models.sales import SalesFulfillment, SalesFulfillmentItem, SalesOrder, SalesOrderItem
+from app.models.sales import SalesFulfillment, SalesFulfillmentItem, SalesFulfillmentStatus, SalesOrder, SalesOrderItem
 
 
 class SalesRepository:
@@ -43,6 +43,19 @@ class SalesRepository:
     def list_fulfillments_for_order(self, tenant_id: int, order_id: int) -> list[SalesFulfillment]:
         return list(self.db.scalars(select(SalesFulfillment).where(SalesFulfillment.tenant_id == tenant_id, SalesFulfillment.sales_order_id == order_id).options(selectinload(SalesFulfillment.items)).order_by(SalesFulfillment.created_at.desc(), SalesFulfillment.id.desc())))
 
+    def get_open_draft_fulfillment_for_order(self, tenant_id: int, order_id: int) -> SalesFulfillment | None:
+        return self.db.scalar(
+            select(SalesFulfillment)
+            .where(
+                SalesFulfillment.tenant_id == tenant_id,
+                SalesFulfillment.sales_order_id == order_id,
+                SalesFulfillment.status == SalesFulfillmentStatus.DRAFT,
+            )
+            .options(selectinload(SalesFulfillment.items))
+            .order_by(SalesFulfillment.created_at.desc(), SalesFulfillment.id.desc())
+            .limit(1)
+        )
+
     def list_all_fulfillments(self, tenant_id: int) -> list[SalesFulfillment]:
         return list(self.db.scalars(select(SalesFulfillment).where(SalesFulfillment.tenant_id == tenant_id).options(selectinload(SalesFulfillment.items)).order_by(SalesFulfillment.created_at.desc(), SalesFulfillment.id.desc())))
 
@@ -63,6 +76,20 @@ class SalesRepository:
         self.db.add(record)
         self.db.flush()
         return record
+
+    def get_fulfillment_item_by_reservation(
+        self,
+        tenant_id: int,
+        fulfillment_id: int,
+        reservation_id: int,
+    ) -> SalesFulfillmentItem | None:
+        return self.db.scalar(
+            select(SalesFulfillmentItem).where(
+                SalesFulfillmentItem.tenant_id == tenant_id,
+                SalesFulfillmentItem.fulfillment_id == fulfillment_id,
+                SalesFulfillmentItem.reservation_id == reservation_id,
+            )
+        )
 
     def delete_fulfillment_items(self, tenant_id: int, fulfillment_id: int) -> None:
         self.db.execute(delete(SalesFulfillmentItem).where(SalesFulfillmentItem.tenant_id == tenant_id, SalesFulfillmentItem.fulfillment_id == fulfillment_id))

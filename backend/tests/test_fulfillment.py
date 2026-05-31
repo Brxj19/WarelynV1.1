@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.auth import UserRole
 from app.models.fulfillment import Package, PackageStatus, PickTask, PickTaskStatus
 from app.models.inventory import InventorySerial, InventorySerialStatus, MovementType, StockLedgerEntry, WarehouseStock
+from app.models.sales import SalesFulfillment, SalesFulfillmentStatus
 from test_sales import auth_headers, confirm_sales_order, create_fulfillment, create_role_user, create_sales_order, register_and_login, setup_sales_dimension, stock_in
 
 
@@ -33,6 +34,31 @@ def pick_all(client: TestClient, token: str, pick_task: dict) -> dict:
     return response.json()
 
 
+def package_and_commit_fulfillment(client: TestClient, token: str, order_id: int, idempotency_key: str) -> dict:
+    package_rows = client.get(f"/api/sales-orders/{order_id}/packages", headers=auth_headers(token))
+    assert package_rows.status_code == 200
+    draft_package = next((pkg for pkg in package_rows.json() if pkg["status"] == "DRAFT"), None)
+    assert draft_package is not None
+    packed = client.post(
+        f"/api/packages/{draft_package['id']}/pack",
+        json={},
+        headers=auth_headers(token),
+    )
+    assert packed.status_code == 200
+
+    fulfillment_rows = client.get(f"/api/sales-orders/{order_id}/fulfillments", headers=auth_headers(token))
+    assert fulfillment_rows.status_code == 200
+    draft_fulfillment = next((row for row in fulfillment_rows.json() if row["status"] == "DRAFT"), None)
+    assert draft_fulfillment is not None
+    committed = client.post(
+        f"/api/sales-fulfillments/{draft_fulfillment['id']}/commit",
+        json={"idempotency_key": idempotency_key},
+        headers=auth_headers(token),
+    )
+    assert committed.status_code == 200
+    return committed.json()
+
+
 def test_create_and_pick_task_from_confirmed_sales_order(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])
@@ -52,11 +78,15 @@ def test_create_and_pick_task_from_confirmed_sales_order(client: TestClient, db_
     assert len(pick_task["items"]) == 1
     assert picked["status"] == "PICKED"
     assert picked["items"][0]["picked_quantity"] == "4.000"
-    # After picking, auto-pack-and-fulfill runs: stock is deducted
+    # Picking now only prepares downstream drafts; stock stays reserved until manual fulfillment commit
     stock = db_session.query(WarehouseStock).one()
-    assert stock.quantity_on_hand == Decimal("6.000")
-    assert stock.quantity_reserved == Decimal("0.000")
+    assert stock.quantity_on_hand == Decimal("10.000")
+    assert stock.quantity_reserved == Decimal("4.000")
     assert stock.quantity_available == Decimal("6.000")
+    package = db_session.query(Package).one()
+    fulfillment = db_session.query(SalesFulfillment).one()
+    assert package.status == PackageStatus.DRAFT
+    assert fulfillment.status == SalesFulfillmentStatus.DRAFT
 
 
 def test_pick_task_creation_requires_pickable_order_and_active_reservations(client: TestClient) -> None:
@@ -122,7 +152,12 @@ def test_serial_picking_requires_valid_unique_serial_and_fulfillment_sells_seria
     assert missing_serial.status_code == 400
     assert missing_serial.json()["error"]["code"] == "SERIAL_SELECTION_REQUIRED"
     assert picked.status_code == 200
-    # Auto-pack-and-fulfill runs after pick, serial should be SOLD
+    # Serial remains in stock until manual fulfillment commit.
+    db_session.refresh(serial)
+    assert serial.status == InventorySerialStatus.IN_STOCK
+    assert db_session.query(StockLedgerEntry).filter(StockLedgerEntry.movement_type == MovementType.SALES_DEDUCT, StockLedgerEntry.serial_id == serial.id).count() == 0
+
+    package_and_commit_fulfillment(client, login["access_token"], order["id"], "serial-pick-commit")
     db_session.refresh(serial)
     assert serial.status == InventorySerialStatus.SOLD
     assert db_session.query(StockLedgerEntry).filter(StockLedgerEntry.movement_type == MovementType.SALES_DEDUCT, StockLedgerEntry.serial_id == serial.id).count() == 1
@@ -151,7 +186,7 @@ def test_serial_allocation_validation_and_duplicates(client: TestClient, db_sess
     assert duplicate_request.json()["error"]["code"] == "DUPLICATE_SERIAL_ALLOCATION"
 
 
-def test_auto_pack_and_fulfill_creates_package_and_deducts_stock(client: TestClient, db_session: Session) -> None:
+def test_pick_completion_creates_draft_package_and_draft_fulfillment_only(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])
     stock_in(client, login["access_token"], dimension, "10")
@@ -159,14 +194,17 @@ def test_auto_pack_and_fulfill_creates_package_and_deducts_stock(client: TestCli
     confirm_sales_order(client, login["access_token"], order, dimension, "3")
     pick_task = pick_all(client, login["access_token"], get_auto_pick_task(client, login["access_token"], order["id"]))
 
-    # Auto-pack-and-fulfill runs after pick completes
+    # Auto flow creates drafts only; no stock deduction.
     assert pick_task["status"] == "PICKED"
     package = db_session.query(Package).first()
+    fulfillment = db_session.query(SalesFulfillment).first()
     assert package is not None
-    assert package.status == PackageStatus.PACKED
+    assert package.status == PackageStatus.DRAFT
+    assert fulfillment is not None
+    assert fulfillment.status == SalesFulfillmentStatus.DRAFT
     stock = db_session.query(WarehouseStock).one()
-    assert stock.quantity_on_hand == Decimal("7.000")
-    assert stock.quantity_reserved == Decimal("0.000")
+    assert stock.quantity_on_hand == Decimal("10.000")
+    assert stock.quantity_reserved == Decimal("3.000")
     assert stock.quantity_available == Decimal("7.000")
 
 
@@ -251,7 +289,94 @@ def test_pick_allows_resubmitting_stale_picked_lines_after_partial_fulfillment(c
     assert resume_pick.json()["status"] == "PICKED"
 
 
-def test_cannot_pack_unpicked_items_and_auto_fulfill_deducts_stock_correctly(client: TestClient, db_session: Session) -> None:
+def test_repeated_pick_cycle_reuses_single_draft_package_and_fulfillment(client: TestClient, db_session: Session) -> None:
+    login = register_and_login(client, "draft-reuse@example.com")
+    dimension = setup_sales_dimension(client, login["access_token"], "DRAFT-REUSE")
+    stock_in(client, login["access_token"], dimension, "10", "stock-in-draft-reuse")
+    order = create_sales_order(client, login["access_token"], dimension, "5", "SO-DRAFT-REUSE")
+    confirm = client.post(
+        f"/api/sales-orders/{order['id']}/confirm",
+        json={
+            "idempotency_key": "confirm-draft-reuse",
+            "allocations": [
+                {
+                    "sales_order_item_id": order["items"][0]["id"],
+                    "warehouse_id": dimension["warehouse_id"],
+                    "location_id": dimension["location_id"],
+                    "quantity": "2",
+                },
+                {
+                    "sales_order_item_id": order["items"][0]["id"],
+                    "warehouse_id": dimension["warehouse_id"],
+                    "location_id": dimension["location_id"],
+                    "quantity": "3",
+                },
+            ],
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert confirm.status_code == 200
+    first_reservation = confirm.json()["stock_results"][0]["reservation"]["id"]
+    second_reservation = confirm.json()["stock_results"][1]["reservation"]["id"]
+
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
+    item_by_reservation = {item["reservation_id"]: item for item in pick_task["items"]}
+    first_item = item_by_reservation[first_reservation]
+    second_item = item_by_reservation[second_reservation]
+
+    partial_pick = client.post(
+        f"/api/pick-tasks/{pick_task['id']}/pick",
+        json={
+            "items": [
+                {"pick_task_item_id": first_item["id"], "picked_quantity": first_item["required_quantity"]},
+                {"pick_task_item_id": second_item["id"], "picked_quantity": "0"},
+            ]
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert partial_pick.status_code == 200
+    partial_fulfillment = create_fulfillment(
+        client,
+        login["access_token"],
+        order,
+        dimension,
+        first_reservation,
+        "2",
+        "FUL-DRAFT-REUSE-P1",
+    )
+    commit_partial = client.post(
+        f"/api/sales-fulfillments/{partial_fulfillment['id']}/commit",
+        json={"idempotency_key": "commit-draft-reuse-p1"},
+        headers=auth_headers(login["access_token"]),
+    )
+    assert commit_partial.status_code == 200
+
+    final_pick = client.post(
+        f"/api/pick-tasks/{pick_task['id']}/pick",
+        json={
+            "items": [
+                {"pick_task_item_id": first_item["id"], "picked_quantity": first_item["required_quantity"]},
+                {"pick_task_item_id": second_item["id"], "picked_quantity": second_item["required_quantity"]},
+            ]
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert final_pick.status_code == 200
+    assert final_pick.json()["status"] == "PICKED"
+
+    draft_packages = db_session.query(Package).filter(
+        Package.sales_order_id == order["id"],
+        Package.status == PackageStatus.DRAFT,
+    ).all()
+    draft_fulfillments = db_session.query(SalesFulfillment).filter(
+        SalesFulfillment.sales_order_id == order["id"],
+        SalesFulfillment.status == SalesFulfillmentStatus.DRAFT,
+    ).all()
+    assert len(draft_packages) == 1
+    assert len(draft_fulfillments) == 1
+
+
+def test_cannot_pack_unpicked_items_and_pick_creates_manual_drafts(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])
     stock_in(client, login["access_token"], dimension, "5")
@@ -263,12 +388,15 @@ def test_cannot_pack_unpicked_items_and_auto_fulfill_deducts_stock_correctly(cli
     unpicked = client.post(f"/api/sales-orders/{order['id']}/packages", json={"package_number": "PKG-UNPICKED", "pick_task_item_ids": [pick_task["items"][0]["id"]]}, headers=auth_headers(login["access_token"]))
     assert unpicked.status_code == 409
 
-    # After picking, auto-pack-and-fulfill runs
+    # After picking, only drafts are prepared; stock is unchanged until manual commit.
     picked = pick_all(client, login["access_token"], pick_task)
     assert picked["status"] == "PICKED"
+    package_rows = client.get(f"/api/sales-orders/{order['id']}/packages", headers=auth_headers(login["access_token"]))
+    assert package_rows.status_code == 200
+    assert any(pkg["status"] == "DRAFT" for pkg in package_rows.json())
     stock = db_session.query(WarehouseStock).one()
-    assert stock.quantity_on_hand == Decimal("3.000")
-    assert stock.quantity_reserved == Decimal("0.000")
+    assert stock.quantity_on_hand == Decimal("5.000")
+    assert stock.quantity_reserved == Decimal("2.000")
 
 
 def test_tenant_isolation_and_roles_for_picking_and_packing(client: TestClient, db_session: Session) -> None:

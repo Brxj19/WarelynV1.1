@@ -290,7 +290,7 @@ export function SalesOrderDetailPage() {
           </div>
         }
         backTo="/sales"
-        description="Confirmation reserves stock, picking records allocation work, packaging stays operational, and fulfillment commits the deduction through backend inventory workflows."
+        description="Confirmation reserves stock, picking records allocation work, and the system prepares package/fulfillment drafts. Packing and fulfillment commit stay manual."
         kicker="Sales order"
         meta={[
           { label: 'Customer', value: order.customer_id ? `Customer #${order.customer_id}` : '-' },
@@ -312,7 +312,7 @@ export function SalesOrderDetailPage() {
                 </div>
                 <div className="flex items-start gap-3">
                   <ListChecks className="mt-0.5 shrink-0 text-warelyn-primary" size={16} />
-                  <p>Pick tasks and packages stay operational until fulfillment is explicitly committed.</p>
+                  <p>After picking completes, draft package and draft fulfillment records are prepared automatically and must be completed manually.</p>
                 </div>
                 <div className="flex items-start gap-3">
                   <Undo2 className="mt-0.5 shrink-0 text-warelyn-primary" size={16} />
@@ -495,7 +495,7 @@ export function SalesOrderDetailPage() {
             </CardHeader>
             <CardBody>
               {packages.length === 0 ? (
-                <EmptyState title="No packages" description="Packed bundles will appear here after picked items are grouped." />
+                <EmptyState title="No packages" description="Draft packages are auto-prepared after picking, then packed manually." />
               ) : (
                 <div className="space-y-3">
                   {packages.map((pkg) => (
@@ -518,7 +518,7 @@ export function SalesOrderDetailPage() {
             </CardHeader>
             <CardBody>
               {fulfillments.length === 0 ? (
-                <EmptyState title="No fulfillments" description="Committed shipment records will appear once stock is fulfilled." />
+                <EmptyState title="No fulfillments" description="Draft fulfillments are auto-prepared after picking, then committed manually." />
               ) : (
                 <div className="space-y-3">
                   {fulfillments.map((fulfillment) => (

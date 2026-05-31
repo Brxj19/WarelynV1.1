@@ -25,7 +25,7 @@ from app.models.documents import (
 )
 from app.repositories.audit import AuditLogRepository
 from app.repositories.documents import DocumentsRepository
-from app.repositories.settings import UserPreferencesRepository
+from app.repositories.settings import TenantSettingsRepository
 from app.services.default_templates import DEFAULT_TEMPLATES
 from app.services.email_service import send_email
 from app.services.pdf_service import render_html_to_pdf
@@ -79,16 +79,6 @@ _PURPOSE_CHANNEL_MAP: dict[DocumentTemplatePurpose, DocumentTemplateChannel] = {
     DocumentTemplatePurpose.USER_ENABLED: DocumentTemplateChannel.EMAIL,
     DocumentTemplatePurpose.ROLE_CHANGED: DocumentTemplateChannel.EMAIL,
 }
-
-# Preference field -> expected purpose
-_PREFERENCE_PURPOSE_MAP: dict[str, DocumentTemplatePurpose] = {
-    "preferred_invoice_template_id": DocumentTemplatePurpose.INVOICE_PDF,
-    "preferred_bill_template_id": DocumentTemplatePurpose.BILL_PDF,
-    "preferred_invoice_email_template_id": DocumentTemplatePurpose.INVOICE_EMAIL,
-    "preferred_bill_email_template_id": DocumentTemplatePurpose.BILL_EMAIL,
-    "preferred_verification_template_id": DocumentTemplatePurpose.EMAIL_VERIFICATION,
-}
-
 
 @dataclass
 class PdfRenderResult:
@@ -568,7 +558,7 @@ class DocumentsService:
         target_email = email or (customer.email if customer else None)
         if not target_email:
             raise AppError("INVOICE_EMAIL_REQUIRED", "Invoice email delivery requires a destination email address.", 400)
-        preferred_id = self._get_user_preferred_template(actor_user_id, "preferred_invoice_email_template_id")
+        preferred_id = self._get_tenant_preferred_template(tenant_id, "preferred_invoice_email_template_id")
         rendered = self.templates.render_by_key(tenant_id, DocumentTemplateChannel.EMAIL, DocumentTemplateKey.INVOICE_SEND, context, preferred_id)
         pdf_result = self.render_invoice_pdf(tenant_id, invoice_id, actor_user_id)
         send_email(
@@ -603,7 +593,7 @@ class DocumentsService:
         target_email = email or (vendor.email if vendor else None)
         if not target_email:
             raise AppError("BILL_EMAIL_REQUIRED", "Bill email delivery requires a destination email address.", 400)
-        preferred_id = self._get_user_preferred_template(actor_user_id, "preferred_bill_email_template_id")
+        preferred_id = self._get_tenant_preferred_template(tenant_id, "preferred_bill_email_template_id")
         rendered = self.templates.render_by_key(tenant_id, DocumentTemplateChannel.EMAIL, DocumentTemplateKey.BILL_SEND, context, preferred_id)
         pdf_result = self.render_bill_pdf(tenant_id, bill_id, actor_user_id)
         send_email(
@@ -672,7 +662,7 @@ class DocumentsService:
 
     def render_invoice_pdf(self, tenant_id: int, invoice_id: int, actor_user_id: int | None = None) -> PdfRenderResult:
         invoice = self.get_invoice(tenant_id, invoice_id)
-        preferred_id = self._get_user_preferred_template(actor_user_id, "preferred_invoice_template_id") if actor_user_id else None
+        preferred_id = self._get_tenant_preferred_template(tenant_id, "preferred_invoice_template_id")
         context = {**self._base_template_context(tenant_id), **self._invoice_context(invoice)}
         context["sender_name"] = context["tenant"]["company_name"]
         rendered = self.templates.render_by_key(tenant_id, DocumentTemplateChannel.PDF, DocumentTemplateKey.PDF_INVOICE, context, preferred_id)
@@ -687,7 +677,7 @@ class DocumentsService:
 
     def render_bill_pdf(self, tenant_id: int, bill_id: int, actor_user_id: int | None = None) -> PdfRenderResult:
         bill = self.get_bill(tenant_id, bill_id)
-        preferred_id = self._get_user_preferred_template(actor_user_id, "preferred_bill_template_id") if actor_user_id else None
+        preferred_id = self._get_tenant_preferred_template(tenant_id, "preferred_bill_template_id")
         context = {**self._base_template_context(tenant_id), **self._bill_context(bill)}
         context["sender_name"] = context["tenant"]["company_name"]
         rendered = self.templates.render_by_key(tenant_id, DocumentTemplateChannel.PDF, DocumentTemplateKey.PDF_BILL, context, preferred_id)
@@ -709,7 +699,7 @@ class DocumentsService:
         """Determine which PDF template will be used for a document type.
 
         Resolution order:
-        1. User preference (preferred_invoice_template_id / preferred_bill_template_id)
+        1. Tenant template preference (preferred_invoice_template_id / preferred_bill_template_id)
         2. Tenant default (the base template key for the channel)
         3. System default (from DEFAULT_TEMPLATES)
 
@@ -728,8 +718,8 @@ class DocumentsService:
 
         self.templates._ensure_defaults(tenant_id)
 
-        # 1. User preference
-        preferred_id = self._get_user_preferred_template(actor_user_id, pref_field) if actor_user_id else None
+        # 1. Tenant-level preference
+        preferred_id = self._get_tenant_preferred_template(tenant_id, pref_field)
         if preferred_id:
             template = self.repository.get_template_by_id(tenant_id, preferred_id)
             if template and template.is_active:
@@ -740,7 +730,7 @@ class DocumentsService:
                         "template_key": template.template_key.value if template.template_key else template.template_code,
                         "template_name": template.name,
                         "template_purpose": template.purpose.value,
-                        "resolution_source": "user_preference",
+                        "resolution_source": "tenant_setting",
                     }
 
         # 2. Tenant default (the base key)
@@ -763,14 +753,14 @@ class DocumentsService:
             404,
         )
 
-    def _get_user_preferred_template(self, user_id: int | None, field: str) -> int | None:
-        if not user_id:
+    def _get_tenant_preferred_template(self, tenant_id: int | None, field: str) -> int | None:
+        if not tenant_id:
             return None
-        prefs_repo = UserPreferencesRepository(self.db)
-        prefs = prefs_repo.get_by_user(user_id)
-        if prefs is None:
+        settings_repo = TenantSettingsRepository(self.db)
+        settings = settings_repo.get_by_tenant(tenant_id)
+        if settings is None:
             return None
-        return getattr(prefs, field, None)
+        return getattr(settings, field, None)
 
     def _next_number(self, tenant_id: int, sequence_key: NumberSequenceKey, default_prefix: str) -> str:
         sequence = self.repository.get_sequence(tenant_id, sequence_key)

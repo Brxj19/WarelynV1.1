@@ -12,6 +12,7 @@ import { Card, CardBody, CardHeader } from '../../components/ui/Card.jsx';
 import { EmptyState } from '../../components/ui/EmptyState.jsx';
 import { ErrorState } from '../../components/ui/ErrorState.jsx';
 import { PageHeader } from '../../components/ui/PageHeader.jsx';
+import { PaginationControls } from '../../components/ui/PaginationControls.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { emptyStateIllustrations } from '../../lib/emptyStates.js';
@@ -70,6 +71,10 @@ export function TenantAdminDashboard() {
   const [tasks, setTasks] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [movementQuery, setMovementQuery] = useState('');
+  const [movementTypeFilter, setMovementTypeFilter] = useState('ALL');
+  const [movementPage, setMovementPage] = useState(1);
+  const [movementPageSize, setMovementPageSize] = useState(10);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -115,6 +120,34 @@ export function TenantAdminDashboard() {
     }, {});
     return Object.entries(grouped).map(([role, count]) => ({ role, count }));
   }, [tasks]);
+
+  const recentMovementRows = dashboard?.recent_stock_movements || [];
+  const movementTypes = useMemo(() => {
+    return Array.from(new Set(recentMovementRows.map((row) => row.movement_type).filter(Boolean)));
+  }, [recentMovementRows]);
+  const filteredMovementRows = useMemo(() => {
+    const normalizedQuery = movementQuery.toLowerCase().trim();
+    return recentMovementRows.filter((row) => {
+      const matchesType = movementTypeFilter === 'ALL' || row.movement_type === movementTypeFilter;
+      if (!matchesType) return false;
+      if (!normalizedQuery) return true;
+      const haystack = [row.product_name, row.movement_type, row.quantity_delta, row.created_at].join(' ').toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [movementQuery, movementTypeFilter, recentMovementRows]);
+  const movementPageCount = Math.max(1, Math.ceil(filteredMovementRows.length / movementPageSize));
+  const movementStart = (movementPage - 1) * movementPageSize;
+  const pagedMovementRows = filteredMovementRows.slice(movementStart, movementStart + movementPageSize);
+
+  useEffect(() => {
+    if (movementPage > movementPageCount) {
+      setMovementPage(movementPageCount);
+    }
+  }, [movementPage, movementPageCount]);
+
+  useEffect(() => {
+    setMovementPage(1);
+  }, [movementQuery, movementTypeFilter]);
 
   const statusRows = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000;
@@ -276,6 +309,26 @@ export function TenantAdminDashboard() {
           </Link>
         </CardHeader>
         <CardBody>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              className="w-full rounded-md border border-warelyn-border bg-white px-3 py-2 text-sm text-warelyn-text placeholder:text-warelyn-muted focus:border-warelyn-primary focus:outline-none"
+              onChange={(event) => setMovementQuery(event.target.value)}
+              placeholder="Filter by product or movement type..."
+              value={movementQuery}
+            />
+            <select
+              className="rounded-md border border-warelyn-border bg-white px-3 py-2 text-sm text-warelyn-text focus:border-warelyn-primary focus:outline-none sm:w-56"
+              onChange={(event) => setMovementTypeFilter(event.target.value)}
+              value={movementTypeFilter}
+            >
+              <option value="ALL">All movement types</option>
+              {movementTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-warelyn-muted">
@@ -287,7 +340,7 @@ export function TenantAdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {(dashboard.recent_stock_movements || []).slice(0, 5).map((row) => (
+                {pagedMovementRows.map((row) => (
                   <tr className="border-t border-warelyn-border" key={row.ledger_id}>
                     <td className="py-2">{row.product_name}</td>
                     <td className="py-2">
@@ -300,6 +353,14 @@ export function TenantAdminDashboard() {
               </tbody>
             </table>
           </div>
+          <PaginationControls
+            page={movementPage}
+            pageCount={movementPageCount}
+            pageSize={movementPageSize}
+            setPage={setMovementPage}
+            setPageSize={setMovementPageSize}
+            totalRows={filteredMovementRows.length}
+          />
         </CardBody>
       </Card>
 
@@ -317,4 +378,3 @@ export function TenantAdminDashboard() {
     </div>
   );
 }
-

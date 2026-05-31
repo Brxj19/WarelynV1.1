@@ -11,7 +11,7 @@ from app.dependencies.auth import require_tenant_user
 from app.models.communication import OTPPurpose, OTPSource
 from app.models.documents import DocumentTemplateChannel, DocumentTemplateKey
 from app.repositories.audit import AuditLogRepository
-from app.repositories.settings import UserPreferencesRepository
+from app.repositories.settings import TenantSettingsRepository
 from app.services.documents import DocumentTemplateService
 from app.repositories.notification import NotificationRepository
 from app.repositories.otp import OTPRepository
@@ -62,9 +62,9 @@ def send_email_verification(request: Request, context: UserContext = Depends(req
     db.commit()
     try:
         preferred_id = None
-        prefs = UserPreferencesRepository(db).get_by_user(context.user.id)
-        if prefs:
-            preferred_id = prefs.preferred_verification_template_id
+        tenant_settings = TenantSettingsRepository(db).get_by_tenant(context.tenant_id)
+        if tenant_settings:
+            preferred_id = tenant_settings.preferred_verification_template_id
         rendered = DocumentTemplateService(db).render_by_key(
             context.tenant_id,
             DocumentTemplateChannel.EMAIL,
