@@ -1,8 +1,8 @@
-from types import SimpleNamespace
-
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import AppError
 from app.models.auth import Tenant, UserRole
 from app.models.fulfillment import Package, PackageStatus
 from app.models.sales import SalesFulfillment, SalesFulfillmentStatus
@@ -183,7 +183,7 @@ def test_commit_fulfillment_creates_invoice_task(client: TestClient, db_session:
     assert tasks[0].assigned_role == "SALES_STAFF"
 
 
-def test_pick_completion_creates_packed_package_and_committed_fulfillment(client: TestClient, db_session: Session):
+def test_pick_completion_creates_draft_package_and_draft_fulfillment(client: TestClient, db_session: Session):
     login = register_and_login(client, "workflow-pick@example.com")
     token = login["access_token"]
     dimension = setup_sales_dimension(client, token)
@@ -195,12 +195,19 @@ def test_pick_completion_creates_packed_package_and_committed_fulfillment(client
 
     package = db_session.query(Package).filter(Package.sales_order_id == order["id"]).one()
     fulfillment = db_session.query(SalesFulfillment).filter(SalesFulfillment.sales_order_id == order["id"]).one()
-    assert package.status == PackageStatus.PACKED
-    assert fulfillment.status == SalesFulfillmentStatus.COMMITTED
+    assert package.status == PackageStatus.DRAFT
+    assert fulfillment.status == SalesFulfillmentStatus.DRAFT
 
 
-def test_auto_pack_and_fulfill_skips_when_pick_task_has_no_creator(db_session: Session):
-    FulfillmentService(db_session)._auto_pack_and_fulfill(tenant_id=1, order_id=999, pick_task=SimpleNamespace(created_by=None, items=[]))
+def test_auto_draft_preparation_raises_when_order_missing(db_session: Session):
+    with pytest.raises(AppError) as exc_info:
+        FulfillmentService(db_session)._auto_prepare_downstream_drafts(
+            tenant_id=1,
+            actor_id=1,
+            order_id=999,
+            pick_task=type("PickTaskStub", (), {"items": []})(),
+        )
+    assert exc_info.value.code == "SALES_ORDER_NOT_FOUND"
 
 
 def test_list_all_packages_endpoint_returns_tenant_packages(client: TestClient):
