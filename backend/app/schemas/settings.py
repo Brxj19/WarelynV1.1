@@ -26,6 +26,11 @@ class TenantSettingsRead(BaseModel):
     over_receive_tolerance: str | None = None
     document_logo_url: str | None = None
     document_footer: str | None = None
+    preferred_invoice_template_id: int | None = None
+    preferred_bill_template_id: int | None = None
+    preferred_invoice_email_template_id: int | None = None
+    preferred_bill_email_template_id: int | None = None
+    preferred_verification_template_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -47,6 +52,11 @@ class TenantSettingsUpdate(BaseModel):
     over_receive_tolerance: str | None = None
     document_logo_url: str | None = None
     document_footer: str | None = None
+    preferred_invoice_template_id: int | None = None
+    preferred_bill_template_id: int | None = None
+    preferred_invoice_email_template_id: int | None = None
+    preferred_bill_email_template_id: int | None = None
+    preferred_verification_template_id: int | None = None
 
     @field_validator("currency")
     @classmethod

@@ -71,12 +71,12 @@ def test_preferred_template_used_in_pdf_render(client: TestClient, db_session: S
     # Pick an INVOICE_PDF template for the invoice preference
     invoice_tpl = next(t for t in templates if t.get("purpose") == "INVOICE_PDF")
     client.patch(
-        "/api/settings/preferences",
+        "/api/settings/tenant",
         json={"preferred_invoice_template_id": invoice_tpl["id"]},
         headers={"Authorization": f"Bearer {token}"},
     )
-    prefs_resp = client.get("/api/settings/preferences", headers={"Authorization": f"Bearer {token}"})
-    assert prefs_resp.json()["preferred_invoice_template_id"] == invoice_tpl["id"]
+    tenant_resp = client.get("/api/settings/tenant", headers={"Authorization": f"Bearer {token}"})
+    assert tenant_resp.json()["preferred_invoice_template_id"] == invoice_tpl["id"]
 
 
 def test_preferred_email_template_stored(client: TestClient, db_session: Session):
@@ -88,7 +88,7 @@ def test_preferred_email_template_stored(client: TestClient, db_session: Session
     # Pick an INVOICE_EMAIL template for the invoice email preference
     invoice_email_tpl = next(t for t in templates if t.get("purpose") == "INVOICE_EMAIL")
     resp = client.patch(
-        "/api/settings/preferences",
+        "/api/settings/tenant",
         json={"preferred_invoice_email_template_id": invoice_email_tpl["id"]},
         headers={"Authorization": f"Bearer {token}"},
     )

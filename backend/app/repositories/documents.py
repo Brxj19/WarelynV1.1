@@ -256,12 +256,22 @@ class DocumentsRepository:
         return list(self.db.scalars(stmt))
 
     def is_template_in_use_by_preference(self, template_id: int) -> bool:
-        """Check if any user preference references this template."""
-        stmt = select(UserPreferences).where(
+        """Check if tenant settings or user preferences reference this template."""
+        tenant_stmt = select(TenantSettings).where(
+            (TenantSettings.preferred_invoice_template_id == template_id)
+            | (TenantSettings.preferred_bill_template_id == template_id)
+            | (TenantSettings.preferred_invoice_email_template_id == template_id)
+            | (TenantSettings.preferred_bill_email_template_id == template_id)
+            | (TenantSettings.preferred_verification_template_id == template_id)
+        )
+        if self.db.scalar(tenant_stmt) is not None:
+            return True
+
+        user_stmt = select(UserPreferences).where(
             (UserPreferences.preferred_invoice_template_id == template_id)
             | (UserPreferences.preferred_bill_template_id == template_id)
             | (UserPreferences.preferred_invoice_email_template_id == template_id)
             | (UserPreferences.preferred_bill_email_template_id == template_id)
             | (UserPreferences.preferred_verification_template_id == template_id)
         )
-        return self.db.scalar(stmt) is not None
+        return self.db.scalar(user_stmt) is not None

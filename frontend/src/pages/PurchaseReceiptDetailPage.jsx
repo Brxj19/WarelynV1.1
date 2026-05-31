@@ -9,6 +9,7 @@ import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
+import { PaginationControls } from '../components/ui/PaginationControls.jsx';
 import { StockImpactPreview } from '../components/ui/StockImpactPreview.jsx';
 import { formatDecimal, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -28,7 +29,51 @@ export function PurchaseReceiptDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
+  const [lineQuery, setLineQuery] = useState('');
+  const [trackingFilter, setTrackingFilter] = useState('ALL');
+  const [linePage, setLinePage] = useState(1);
+  const [linePageSize, setLinePageSize] = useState(10);
   const mayWrite = canWrite.has(user?.role);
+
+  const filteredItems = (receipt?.items ?? []).filter((item) => {
+    const normalizedQuery = lineQuery.toLowerCase().trim();
+    const matchesQuery = !normalizedQuery
+      ? true
+      : [
+          item.product_id,
+          item.warehouse_id,
+          item.location_id,
+          item.batch_number,
+          ...(item.serial_numbers ?? []),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery);
+    const hasBatch = Boolean(item.batch_number);
+    const hasSerials = Boolean(item.serial_numbers?.length);
+    const matchesTracking =
+      trackingFilter === 'ALL'
+        ? true
+        : trackingFilter === 'BATCH'
+          ? hasBatch
+          : trackingFilter === 'SERIAL'
+            ? hasSerials
+            : !hasBatch && !hasSerials;
+    return matchesQuery && matchesTracking;
+  });
+
+  const linePageCount = Math.max(1, Math.ceil(filteredItems.length / linePageSize));
+  const lineStart = (linePage - 1) * linePageSize;
+  const pagedItems = filteredItems.slice(lineStart, lineStart + linePageSize);
+
+  useEffect(() => {
+    if (linePage > linePageCount) setLinePage(linePageCount);
+  }, [linePage, linePageCount]);
+
+  useEffect(() => {
+    setLinePage(1);
+  }, [lineQuery, trackingFilter]);
 
   async function load() {
     setIsLoading(true);
@@ -99,12 +144,29 @@ export function PurchaseReceiptDetailPage() {
       <Card>
         <CardHeader><h2 className="text-lg font-semibold text-warelyn-text">Receipt lines</h2></CardHeader>
         <CardBody>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+            <Input label="Filter lines" onChange={(event) => setLineQuery(event.target.value)} placeholder="Search product, location, batch, serial..." value={lineQuery} />
+            <div className="sm:w-48">
+              <label className="mb-1 block text-xs font-medium text-warelyn-muted">Tracking</label>
+              <select
+                className="w-full rounded-md border border-warelyn-border bg-white px-3 py-2 text-sm text-warelyn-text focus:border-warelyn-primary focus:outline-none"
+                onChange={(event) => setTrackingFilter(event.target.value)}
+                value={trackingFilter}
+              >
+                <option value="ALL">All</option>
+                <option value="BATCH">Batch</option>
+                <option value="SERIAL">Serial</option>
+                <option value="UNTRACKED">Untracked</option>
+              </select>
+            </div>
+          </div>
           <div className="overflow-hidden rounded-xl border border-warelyn-border">
             <table className="min-w-full divide-y divide-warelyn-border text-sm">
               <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-warelyn-muted"><tr><th className="px-4 py-3">Product</th><th className="px-4 py-3">Warehouse</th><th className="px-4 py-3">Location</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Unit Cost</th><th className="px-4 py-3">Tracking</th></tr></thead>
-              <tbody className="divide-y divide-warelyn-border bg-white">{receipt.items.map((item) => <tr key={item.id}><td className="px-4 py-3">#{item.product_id}</td><td className="px-4 py-3">#{item.warehouse_id}</td><td className="px-4 py-3">#{item.location_id}</td><td className="px-4 py-3 font-semibold text-warelyn-text">{formatDecimal(item.received_quantity)}</td><td className="px-4 py-3">{formatMoney(item.unit_cost, currency)}</td><td className="px-4 py-3 text-xs text-warelyn-muted">{item.batch_number ? <span className="block font-semibold text-warelyn-text">Batch {item.batch_number}</span> : null}{item.expiry_date ? <span className="block">Expires {item.expiry_date}</span> : null}{item.warranty_until ? <span className="block">Warranty {item.warranty_until}</span> : null}{item.serial_numbers?.length ? <span className="block">Serials {item.serial_numbers.join(', ')}</span> : null}{!item.batch_number && !item.serial_numbers?.length ? 'Untracked' : null}</td></tr>)}</tbody>
+              <tbody className="divide-y divide-warelyn-border bg-white">{pagedItems.map((item) => <tr key={item.id}><td className="px-4 py-3">#{item.product_id}</td><td className="px-4 py-3">#{item.warehouse_id}</td><td className="px-4 py-3">#{item.location_id}</td><td className="px-4 py-3 font-semibold text-warelyn-text">{formatDecimal(item.received_quantity)}</td><td className="px-4 py-3">{formatMoney(item.unit_cost, currency)}</td><td className="px-4 py-3 text-xs text-warelyn-muted">{item.batch_number ? <span className="block font-semibold text-warelyn-text">Batch {item.batch_number}</span> : null}{item.expiry_date ? <span className="block">Expires {item.expiry_date}</span> : null}{item.warranty_until ? <span className="block">Warranty {item.warranty_until}</span> : null}{item.serial_numbers?.length ? <span className="block">Serials {item.serial_numbers.join(', ')}</span> : null}{!item.batch_number && !item.serial_numbers?.length ? 'Untracked' : null}</td></tr>)}</tbody>
             </table>
           </div>
+          <PaginationControls page={linePage} pageCount={linePageCount} pageSize={linePageSize} setPage={setLinePage} setPageSize={setLinePageSize} totalRows={filteredItems.length} />
         </CardBody>
       </Card>
       {mayWrite && receipt.status === 'DRAFT' ? (

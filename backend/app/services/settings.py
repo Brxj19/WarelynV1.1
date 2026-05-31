@@ -18,6 +18,8 @@ _PREFERENCE_PURPOSE_MAP: dict[str, DocumentTemplatePurpose] = {
     "preferred_verification_template_id": DocumentTemplatePurpose.EMAIL_VERIFICATION,
 }
 
+_TENANT_TEMPLATE_PREFERENCE_FIELDS = set(_PREFERENCE_PURPOSE_MAP.keys())
+
 
 class TenantSettingsService:
     def __init__(self, db: Session) -> None:
@@ -31,6 +33,30 @@ class TenantSettingsService:
         return settings
 
     def update_settings(self, tenant_id: int, values: dict[str, Any], actor_user_id: int | None = None, actor_role: str = "") -> Any:
+        docs_repository = DocumentsRepository(self.db)
+        for field, expected_purpose in _PREFERENCE_PURPOSE_MAP.items():
+            if field in values and values[field] is not None:
+                template_id = values[field]
+                template = docs_repository.get_template(tenant_id, template_id)
+                if template is None:
+                    raise AppError(
+                        "DOCUMENT_TEMPLATE_NOT_FOUND",
+                        f"Template {template_id} not found or does not belong to this tenant.",
+                        400,
+                    )
+                if not template.is_active:
+                    raise AppError(
+                        "TEMPLATE_INACTIVE",
+                        f"Cannot set inactive template as preference for {field}.",
+                        400,
+                    )
+                if template.purpose != expected_purpose:
+                    raise AppError(
+                        "TEMPLATE_PURPOSE_MISMATCH",
+                        f"Template purpose '{template.purpose.value}' does not match expected purpose '{expected_purpose.value}' for {field}.",
+                        400,
+                    )
+
         self.repository.get_or_create(tenant_id)
         result = self.repository.update(tenant_id, values)
         if result is None:
@@ -64,6 +90,9 @@ class UserPreferencesService:
         return prefs
 
     def update_preferences(self, user_id: int, values: dict[str, Any], actor_role: str = "", tenant_id: int | None = None) -> Any:
+        # Template selections are now tenant-wide and managed from tenant settings.
+        values = {key: value for key, value in values.items() if key not in _TENANT_TEMPLATE_PREFERENCE_FIELDS}
+
         # Validate template preferences if any are being set
         for field, expected_purpose in _PREFERENCE_PURPOSE_MAP.items():
             if field in values and values[field] is not None:

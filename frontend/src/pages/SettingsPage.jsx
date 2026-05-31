@@ -1,8 +1,8 @@
 import { Bell, Building2, CheckCircle2, FileText, Globe, Home, LayoutList, Mail, Monitor, Moon, Palette, Smartphone, Sun, XCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { Badge, StatusBadge } from '../components/ui/Badge.jsx';
+import { Badge } from '../components/ui/Badge.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
 import { CurrencySelect } from '../components/ui/CurrencySelect.jsx';
@@ -17,51 +17,6 @@ import * as settingsService from '../services/settingsService.js';
 import * as verificationService from '../services/verificationService.js';
 import * as documentService from '../services/documentService.js';
 
-function FormatToolbar({ textareaRef, onBodyChange, body }) {
-  function applyFormat(openTag, closeTag) {
-    const el = textareaRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const selected = body.substring(start, end);
-    const newBody = body.substring(0, start) + openTag + selected + closeTag + body.substring(end);
-    onBodyChange(newBody);
-    setTimeout(() => {
-      el.selectionStart = start + openTag.length;
-      el.selectionEnd = start + openTag.length + selected.length;
-      el.focus();
-    }, 0);
-  }
-
-  const tools = [
-    { label: 'B', title: 'Bold', open: '<strong>', close: '</strong>', style: { fontWeight: 'bold' } },
-    { label: 'I', title: 'Italic', open: '<em>', close: '</em>', style: { fontStyle: 'italic' } },
-    { label: 'U', title: 'Underline', open: '<u>', close: '</u>', style: { textDecoration: 'underline' } },
-    { label: 'S', title: 'Strikethrough', open: '<s>', close: '</s>', style: { textDecoration: 'line-through' } },
-    { label: 'H1', title: 'Heading 1', open: '<h1>', close: '</h1>', style: { fontWeight: 'bold', fontSize: '14px' } },
-    { label: 'H2', title: 'Heading 2', open: '<h2>', close: '</h2>', style: { fontWeight: 'bold', fontSize: '12px' } },
-    { label: 'P', title: 'Paragraph', open: '<p>', close: '</p>', style: {} },
-    { label: 'A', title: 'Link', open: '<a href="">', close: '</a>', style: { color: '#2563eb', textDecoration: 'underline' } },
-  ];
-
-  return (
-    <div className="flex items-center gap-1 border border-warelyn-border border-b-0 bg-gray-50 px-3 py-2 rounded-t-lg">
-      {tools.map((tool) => (
-        <button
-          key={tool.label}
-          type="button"
-          title={tool.title}
-          style={tool.style}
-          className="px-2 py-1 text-sm rounded hover:bg-warelyn-border transition text-warelyn-text"
-          onClick={() => applyFormat(tool.open, tool.close)}
-        >
-          {tool.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function TenantSettingsSection({ accessToken }) {
   const toast = useToast();
   const { refreshSettings } = useTenantSettings();
@@ -72,15 +27,15 @@ function TenantSettingsSection({ accessToken }) {
   const [activeSection, setActiveSection] = useState('company');
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [tplList, setTplList] = useState([]);
-  const [tplEditing, setTplEditing] = useState(null);
-  const [tplForm, setTplForm] = useState({ name: '', subject_template: '', body_template: '' });
-  const tplBodyRef = useRef(null);
+  const [invoicePdfTemplates, setInvoicePdfTemplates] = useState([]);
+  const [billPdfTemplates, setBillPdfTemplates] = useState([]);
+  const [invoiceEmailTemplates, setInvoiceEmailTemplates] = useState([]);
+  const [billEmailTemplates, setBillEmailTemplates] = useState([]);
+  const [verificationTemplates, setVerificationTemplates] = useState([]);
 
   const tenantSections = [
     { group: 'Organization', items: [{ id: 'company', icon: Building2, label: 'Company' }, { id: 'address', icon: Globe, label: 'Address' }] },
     { group: 'Operations', items: [{ id: 'inventory', icon: LayoutList, label: 'Inventory' }, { id: 'documents', icon: FileText, label: 'Documents' }] },
-    { group: 'Templates', items: [{ id: 'email-templates', icon: Mail, label: 'Email' }, { id: 'pdf-templates', icon: FileText, label: 'PDF' }] },
   ];
 
   useEffect(() => {
@@ -104,10 +59,21 @@ function TenantSettingsSection({ accessToken }) {
           low_stock_alert_enabled: data?.low_stock_alert_enabled ?? true,
           document_logo_url: data?.document_logo_url ?? '',
           document_footer: data?.document_footer ?? '',
+          preferred_invoice_template_id: data?.preferred_invoice_template_id ? String(data.preferred_invoice_template_id) : '',
+          preferred_bill_template_id: data?.preferred_bill_template_id ? String(data.preferred_bill_template_id) : '',
+          preferred_invoice_email_template_id: data?.preferred_invoice_email_template_id ? String(data.preferred_invoice_email_template_id) : '',
+          preferred_bill_email_template_id: data?.preferred_bill_email_template_id ? String(data.preferred_bill_email_template_id) : '',
+          preferred_verification_template_id: data?.preferred_verification_template_id ? String(data.preferred_verification_template_id) : '',
         });
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+
+    documentService.listTemplates(accessToken, 'PDF', 'INVOICE_PDF').then(setInvoicePdfTemplates).catch(() => {});
+    documentService.listTemplates(accessToken, 'PDF', 'BILL_PDF').then(setBillPdfTemplates).catch(() => {});
+    documentService.listTemplates(accessToken, 'EMAIL', 'INVOICE_EMAIL').then(setInvoiceEmailTemplates).catch(() => {});
+    documentService.listTemplates(accessToken, 'EMAIL', 'BILL_EMAIL').then(setBillEmailTemplates).catch(() => {});
+    documentService.listTemplates(accessToken, 'EMAIL', 'EMAIL_VERIFICATION').then(setVerificationTemplates).catch(() => {});
   }, [accessToken]);
 
   function handleChange(field) {
@@ -118,8 +84,17 @@ function TenantSettingsSection({ accessToken }) {
     setSaving(true);
     try {
       const data = {};
+      const templateFields = new Set([
+        'preferred_invoice_template_id',
+        'preferred_bill_template_id',
+        'preferred_invoice_email_template_id',
+        'preferred_bill_email_template_id',
+        'preferred_verification_template_id',
+      ]);
       for (const [key, value] of Object.entries(form)) {
-        if (value !== (settings?.[key] ?? '')) data[key] = value;
+        const nextValue = templateFields.has(key) ? (value ? Number(value) : null) : value;
+        const currentValue = settings?.[key] ?? null;
+        if (nextValue !== currentValue) data[key] = nextValue;
       }
       if (Object.keys(data).length > 0) {
         const updated = await settingsService.updateTenantSettings(accessToken, data);
@@ -133,35 +108,6 @@ function TenantSettingsSection({ accessToken }) {
     } finally {
       setSaving(false);
     }
-  }
-
-  async function loadTemplates(channel) {
-    try {
-      const data = await documentService.listTemplates(accessToken, channel);
-      setTplList(data);
-    } catch { setTplList([]); }
-  }
-
-  useEffect(() => {
-    if (activeSection === 'email-templates') loadTemplates('EMAIL');
-    if (activeSection === 'pdf-templates') loadTemplates('PDF');
-  }, [activeSection, accessToken]);
-
-  function openTplEditor(template) {
-    setTplEditing(template);
-    setTplForm({ name: template.name, subject_template: template.subject_template ?? '', body_template: template.body_template ?? '' });
-  }
-
-  async function saveTpl() {
-    if (!tplEditing) return;
-    try {
-      const payload = { name: tplForm.name, body_template: tplForm.body_template, is_active: true };
-      if (tplEditing.channel === 'EMAIL') payload.subject_template = tplForm.subject_template;
-      await documentService.updateTemplate(accessToken, tplEditing.id, payload);
-      toast.success('Template saved.');
-      setTplEditing(null);
-      loadTemplates(tplEditing.channel);
-    } catch (e) { toast.error(e.message); }
   }
 
   if (loading) return <LoadingState message="Loading tenant settings..." />;
@@ -214,7 +160,7 @@ function TenantSettingsSection({ accessToken }) {
         return (
           <div className="space-y-4">
             <h3 className="text-base font-semibold text-warelyn-text mb-1">Document Settings</h3>
-            <p className="text-sm text-warelyn-muted mb-4">Customize generated invoices and bills.</p>
+            <p className="text-sm text-warelyn-muted mb-4">Customize generated invoices and bills. Template selection here applies to all users in this tenant.</p>
             <div className="space-y-4">
               <Input label="Document Logo URL" value={form.document_logo_url} onChange={handleChange('document_logo_url')} helper="URL to your company logo" disabled={!editing} />
               <div>
@@ -223,79 +169,81 @@ function TenantSettingsSection({ accessToken }) {
                   <textarea className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition placeholder:text-slate-400 focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed" value={form.document_footer} onChange={handleChange('document_footer')} rows={3} disabled={!editing} />
                 </label>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-warelyn-text">Invoice PDF Template</span>
+                  <select
+                    className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={form.preferred_invoice_template_id ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, preferred_invoice_template_id: e.target.value }))}
+                    disabled={!editing}
+                  >
+                    <option value="">System default</option>
+                    {invoicePdfTemplates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-warelyn-text">Invoice Email Template</span>
+                  <select
+                    className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={form.preferred_invoice_email_template_id ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, preferred_invoice_email_template_id: e.target.value }))}
+                    disabled={!editing}
+                  >
+                    <option value="">System default</option>
+                    {invoiceEmailTemplates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-warelyn-text">Bill PDF Template</span>
+                  <select
+                    className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={form.preferred_bill_template_id ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, preferred_bill_template_id: e.target.value }))}
+                    disabled={!editing}
+                  >
+                    <option value="">System default</option>
+                    {billPdfTemplates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-2 block text-sm font-medium text-warelyn-text">Bill Email Template</span>
+                  <select
+                    className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={form.preferred_bill_email_template_id ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, preferred_bill_email_template_id: e.target.value }))}
+                    disabled={!editing}
+                  >
+                    <option value="">System default</option>
+                    {billEmailTemplates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-2 block text-sm font-medium text-warelyn-text">Verification Email Template</span>
+                  <select
+                    className="block w-full rounded-lg border border-warelyn-border bg-white px-3 py-2.5 text-sm text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10 disabled:opacity-60 disabled:cursor-not-allowed"
+                    value={form.preferred_verification_template_id ?? ''}
+                    onChange={(e) => setForm((p) => ({ ...p, preferred_verification_template_id: e.target.value }))}
+                    disabled={!editing}
+                  >
+                    <option value="">System default</option>
+                    {verificationTemplates.map((template) => (
+                      <option key={template.id} value={String(template.id)}>{template.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
         );
-      case 'email-templates':
-      case 'pdf-templates': {
-        const isPdf = activeSection === 'pdf-templates';
-        if (tplEditing && tplEditing.channel === (isPdf ? 'PDF' : 'EMAIL')) {
-          return (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-warelyn-text">Edit: {tplEditing.name}</h3>
-                <Button variant="ghost" size="sm" onClick={() => setTplEditing(null)}>Back to Gallery</Button>
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-3">
-                  <Input label="Template Name" value={tplForm.name} onChange={(e) => setTplForm((p) => ({ ...p, name: e.target.value }))} />
-                  {!isPdf && <Input label="Subject" value={tplForm.subject_template} onChange={(e) => setTplForm((p) => ({ ...p, subject_template: e.target.value }))} />}
-                  <div>
-                    <span className="mb-2 block text-sm font-medium text-warelyn-text">HTML Source</span>
-                    {!isPdf && <FormatToolbar textareaRef={tplBodyRef} body={tplForm.body_template} onBodyChange={(v) => setTplForm((p) => ({ ...p, body_template: v }))} />}
-                    <textarea
-                      ref={tplBodyRef}
-                      className={`block min-h-[300px] w-full ${!isPdf ? 'rounded-b-lg rounded-t-none' : 'rounded-lg'} border border-warelyn-border bg-white px-3 py-2.5 font-mono text-xs text-warelyn-text shadow-sm outline-none transition focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10`}
-                      value={tplForm.body_template}
-                      onChange={(e) => setTplForm((p) => ({ ...p, body_template: e.target.value }))}
-                    />
-                  </div>
-                  <Button onClick={saveTpl}>Save Template</Button>
-                </div>
-                <div>
-                  <span className="mb-2 block text-sm font-medium text-warelyn-text">{isPdf ? 'Live Preview (A4)' : 'Live Preview'}</span>
-                  {isPdf ? (
-                    <div className="flex justify-center">
-                      <div
-                        className="relative bg-white border border-warelyn-border shadow-lg"
-                        style={{ width: '360px', height: '509px', overflow: 'hidden' }}
-                      >
-                        <iframe srcDoc={tplForm.body_template} title="Preview" className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '720px', height: '1018px', transform: 'scale(0.5)', transformOrigin: 'top left' }} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-warelyn-border bg-white overflow-hidden" style={{ height: '500px' }}>
-                      <iframe srcDoc={tplForm.body_template} title="Preview" className="w-full h-full border-0" />
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        }
-        return (
-          <div className="space-y-4">
-            <h3 className="text-base font-semibold text-warelyn-text mb-1">{isPdf ? 'PDF' : 'Email'} Templates</h3>
-            <p className="text-sm text-warelyn-muted mb-4">{isPdf ? 'Invoice and bill PDF layouts.' : 'Email notification templates.'}</p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {tplList.map((t) => (
-                <div key={t.id} className="group relative cursor-pointer overflow-hidden rounded-xl border border-warelyn-border hover:shadow-lg transition" onClick={() => openTplEditor(t)}>
-                  <div className="relative h-48 overflow-hidden bg-gray-50">
-                    <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: isPdf ? '640px' : '560px', height: isPdf ? '905px' : '700px', transform: isPdf ? 'scale(0.25)' : 'scale(0.28)', transformOrigin: 'top left' }} />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
-                      <span className="opacity-0 group-hover:opacity-100 transition rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-warelyn-primary shadow">Edit Template</span>
-                    </div>
-                  </div>
-                  <div className="p-2 border-t border-warelyn-border flex items-center justify-between">
-                    <span className="text-xs font-semibold text-warelyn-text truncate">{t.name}</span>
-                    <StatusBadge status={t.is_active ? 'ACTIVE' : 'INACTIVE'}>{t.is_active ? 'Active' : 'Off'}</StatusBadge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      }
       default:
         return null;
     }
@@ -313,7 +261,7 @@ function TenantSettingsSection({ accessToken }) {
             <div key={section.group}>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-warelyn-muted">{section.group}</p>
               {section.items.map((item) => (
-                <button key={item.id} type="button" onClick={() => { setActiveSection(item.id); setTplEditing(null); }}
+                <button key={item.id} type="button" onClick={() => setActiveSection(item.id)}
                   className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition
                     ${activeSection === item.id
                       ? 'bg-blue-50 text-warelyn-primary'
@@ -329,18 +277,16 @@ function TenantSettingsSection({ accessToken }) {
         </nav>
         <div className="flex-1 min-w-0">
           {renderSection()}
-          {!['email-templates', 'pdf-templates'].includes(activeSection) && (
-            <div className="mt-6 flex justify-end gap-2 border-t border-warelyn-border pt-4">
-              {editing ? (
-                <>
-                  <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
-                  <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Settings'}</Button>
-                </>
-              ) : (
-                <Button variant="secondary" onClick={() => setEditing(true)}>Edit Settings</Button>
-              )}
-            </div>
-          )}
+          <div className="mt-6 flex justify-end gap-2 border-t border-warelyn-border pt-4">
+            {editing ? (
+              <>
+                <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Settings'}</Button>
+              </>
+            ) : (
+              <Button variant="secondary" onClick={() => setEditing(true)}>Edit Settings</Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -473,8 +419,6 @@ function ToggleSwitch({ label, description, checked, onChange }) {
 
 function UserPreferencesSection({ accessToken }) {
   const toast = useToast();
-  const { user } = useAuth();
-  const canManageTemplateSettings = ['TENANT_ADMIN', 'INVENTORY_MANAGER'].includes(user?.role);
   const [prefs, setPrefs] = useState(null);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
@@ -487,16 +431,7 @@ function UserPreferencesSection({ accessToken }) {
     { group: 'Appearance', items: [{ id: 'display', icon: Palette, label: 'Display' }] },
     { group: 'Workspace', items: [{ id: 'startup', icon: Home, label: 'Startup Page' }, { id: 'tables', icon: LayoutList, label: 'Table View' }] },
     { group: 'Notifications', items: [{ id: 'alerts', icon: Bell, label: 'Alerts' }] },
-    ...(canManageTemplateSettings
-      ? [{ group: 'Templates', items: [{ id: 'invoice-templates', icon: FileText, label: 'Invoice' }, { id: 'bill-templates', icon: FileText, label: 'Bill' }, { id: 'verification-templates', icon: Mail, label: 'Verification' }] }]
-      : []),
   ];
-
-  const [invoicePdfTemplates, setInvoicePdfTemplates] = useState([]);
-  const [billPdfTemplates, setBillPdfTemplates] = useState([]);
-  const [invoiceEmailTemplates, setInvoiceEmailTemplates] = useState([]);
-  const [billEmailTemplates, setBillEmailTemplates] = useState([]);
-  const [verificationTemplates, setVerificationTemplates] = useState([]);
 
   useEffect(() => {
     settingsService.getUserPreferences(accessToken)
@@ -508,23 +443,11 @@ function UserPreferencesSection({ accessToken }) {
           theme_preference: data?.theme_preference ?? 'light',
           notification_email_enabled: data?.notification_email_enabled ?? true,
           notification_in_app_enabled: data?.notification_in_app_enabled ?? true,
-          preferred_invoice_template_id: data?.preferred_invoice_template_id ?? null,
-          preferred_bill_template_id: data?.preferred_bill_template_id ?? null,
-          preferred_invoice_email_template_id: data?.preferred_invoice_email_template_id ?? null,
-          preferred_bill_email_template_id: data?.preferred_bill_email_template_id ?? null,
-          preferred_verification_template_id: data?.preferred_verification_template_id ?? null,
         });
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-    if (canManageTemplateSettings) {
-      documentService.listTemplates(accessToken, 'PDF', 'INVOICE_PDF').then(setInvoicePdfTemplates).catch(() => {});
-      documentService.listTemplates(accessToken, 'PDF', 'BILL_PDF').then(setBillPdfTemplates).catch(() => {});
-      documentService.listTemplates(accessToken, 'EMAIL', 'INVOICE_EMAIL').then(setInvoiceEmailTemplates).catch(() => {});
-      documentService.listTemplates(accessToken, 'EMAIL', 'BILL_EMAIL').then(setBillEmailTemplates).catch(() => {});
-      documentService.listTemplates(accessToken, 'EMAIL', 'EMAIL_VERIFICATION').then(setVerificationTemplates).catch(() => {});
-    }
-  }, [accessToken, canManageTemplateSettings]);
+  }, [accessToken]);
 
   async function handleSave() {
     setSaving(true);
@@ -614,126 +537,6 @@ function UserPreferencesSection({ accessToken }) {
             <p className="text-sm text-warelyn-muted mb-4">Control how you receive alerts.</p>
             <ToggleSwitch label="Email notifications" description="Receive alerts via email" checked={form.notification_email_enabled} onChange={(v) => editing && setForm((p) => ({ ...p, notification_email_enabled: v }))} />
             <ToggleSwitch label="In-app notifications" description="Show alerts inside Warelyn" checked={form.notification_in_app_enabled} onChange={(v) => editing && setForm((p) => ({ ...p, notification_in_app_enabled: v }))} />
-          </div>
-        );
-      case 'invoice-templates':
-        return (
-          <div className="space-y-6">
-            <h3 className="text-base font-semibold text-warelyn-text mb-1">Invoice Templates</h3>
-            <p className="text-sm text-warelyn-muted mb-4">Choose your preferred templates for invoices.</p>
-            {invoicePdfTemplates.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-warelyn-text mb-2">PDF Template</p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {invoicePdfTemplates.map((t) => (
-                    <button key={t.id} type="button" onClick={() => editing && setForm((p) => ({ ...p, preferred_invoice_template_id: t.id }))}
-                      className={`rounded-xl border-2 overflow-hidden transition ${!editing ? 'opacity-70 cursor-default' : ''}
-                        ${form.preferred_invoice_template_id === t.id ? 'border-warelyn-primary' : 'border-warelyn-border hover:border-warelyn-primary/40'}`}
-                    >
-                      <div className="relative h-32 overflow-hidden bg-gray-50">
-                        <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '640px', height: '905px', transform: 'scale(0.2)', transformOrigin: 'top left' }} />
-                      </div>
-                      <div className="p-2 text-center">
-                        <span className={`text-xs font-semibold ${form.preferred_invoice_template_id === t.id ? 'text-warelyn-primary' : 'text-warelyn-text'}`}>{t.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {invoiceEmailTemplates.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-warelyn-text mb-2">Email Template</p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {invoiceEmailTemplates.map((t) => (
-                    <button key={t.id} type="button" onClick={() => editing && setForm((p) => ({ ...p, preferred_invoice_email_template_id: t.id }))}
-                      className={`rounded-xl border-2 overflow-hidden transition ${!editing ? 'opacity-70 cursor-default' : ''}
-                        ${form.preferred_invoice_email_template_id === t.id ? 'border-warelyn-primary' : 'border-warelyn-border hover:border-warelyn-primary/40'}`}
-                    >
-                      <div className="relative h-32 overflow-hidden bg-gray-50">
-                        <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '560px', height: '700px', transform: 'scale(0.2)', transformOrigin: 'top left' }} />
-                      </div>
-                      <div className="p-2 text-center">
-                        <span className={`text-xs font-semibold ${form.preferred_invoice_email_template_id === t.id ? 'text-warelyn-primary' : 'text-warelyn-text'}`}>{t.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      case 'bill-templates':
-        return (
-          <div className="space-y-6">
-            <h3 className="text-base font-semibold text-warelyn-text mb-1">Bill Templates</h3>
-            <p className="text-sm text-warelyn-muted mb-4">Choose your preferred templates for bills.</p>
-            {billPdfTemplates.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-warelyn-text mb-2">PDF Template</p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {billPdfTemplates.map((t) => (
-                    <button key={t.id} type="button" onClick={() => editing && setForm((p) => ({ ...p, preferred_bill_template_id: t.id }))}
-                      className={`rounded-xl border-2 overflow-hidden transition ${!editing ? 'opacity-70 cursor-default' : ''}
-                        ${form.preferred_bill_template_id === t.id ? 'border-warelyn-primary' : 'border-warelyn-border hover:border-warelyn-primary/40'}`}
-                    >
-                      <div className="relative h-32 overflow-hidden bg-gray-50">
-                        <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '640px', height: '905px', transform: 'scale(0.2)', transformOrigin: 'top left' }} />
-                      </div>
-                      <div className="p-2 text-center">
-                        <span className={`text-xs font-semibold ${form.preferred_bill_template_id === t.id ? 'text-warelyn-primary' : 'text-warelyn-text'}`}>{t.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {billEmailTemplates.length > 0 && (
-              <div>
-                <p className="text-sm font-semibold text-warelyn-text mb-2">Email Template</p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {billEmailTemplates.map((t) => (
-                    <button key={t.id} type="button" onClick={() => editing && setForm((p) => ({ ...p, preferred_bill_email_template_id: t.id }))}
-                      className={`rounded-xl border-2 overflow-hidden transition ${!editing ? 'opacity-70 cursor-default' : ''}
-                        ${form.preferred_bill_email_template_id === t.id ? 'border-warelyn-primary' : 'border-warelyn-border hover:border-warelyn-primary/40'}`}
-                    >
-                      <div className="relative h-32 overflow-hidden bg-gray-50">
-                        <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '560px', height: '700px', transform: 'scale(0.2)', transformOrigin: 'top left' }} />
-                      </div>
-                      <div className="p-2 text-center">
-                        <span className={`text-xs font-semibold ${form.preferred_bill_email_template_id === t.id ? 'text-warelyn-primary' : 'text-warelyn-text'}`}>{t.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      case 'verification-templates':
-        return (
-          <div className="space-y-6">
-            <h3 className="text-base font-semibold text-warelyn-text mb-1">Verification Templates</h3>
-            <p className="text-sm text-warelyn-muted mb-4">Email template used for OTP verification codes.</p>
-            {verificationTemplates.length > 0 ? (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {verificationTemplates.map((t) => (
-                  <button key={t.id} type="button" onClick={() => editing && setForm((p) => ({ ...p, preferred_verification_template_id: t.id }))}
-                    className={`rounded-xl border-2 overflow-hidden transition ${!editing ? 'opacity-70 cursor-default' : ''}
-                      ${form.preferred_verification_template_id === t.id ? 'border-warelyn-primary' : 'border-warelyn-border hover:border-warelyn-primary/40'}`}
-                  >
-                    <div className="relative h-32 overflow-hidden bg-gray-50">
-                      <iframe srcDoc={t.body_template} title={t.name} className="absolute top-0 left-0 border-0 pointer-events-none" style={{ width: '560px', height: '700px', transform: 'scale(0.2)', transformOrigin: 'top left' }} />
-                    </div>
-                    <div className="p-2 text-center">
-                      <span className={`text-xs font-semibold ${form.preferred_verification_template_id === t.id ? 'text-warelyn-primary' : 'text-warelyn-text'}`}>{t.name}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-warelyn-muted">No verification templates configured.</p>
-            )}
           </div>
         );
       default:
