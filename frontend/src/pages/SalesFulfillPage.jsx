@@ -156,7 +156,7 @@ export function SalesFulfillPage() {
     <div className="space-y-6">
       <PageHeader
         backTo="/sales"
-        description="Create a fulfillment draft against active reservations. Stock is only deducted later when the draft is committed."
+        description="Fulfillment drafts can be auto-prepared after picking. Validate lines and commit manually to deduct reserved stock."
         kicker="Fulfillment"
         title={`Fulfill ${order.order_number}`}
       />
@@ -170,7 +170,7 @@ export function SalesFulfillPage() {
             <div className="workflow-helper-panel">
               <h3>Commit warning</h3>
               <p>
-                This screen only creates the draft. The actual stock deduction happens later when the fulfillment is committed, so each line must stay aligned with an active reservation.
+                This screen maintains the draft only. Stock deduction happens only when the fulfillment is committed, so each line must stay aligned with an active reservation.
               </p>
             </div>
             <Input label="Fulfillment number" required value={fulfillmentNumber} onChange={(event) => setFulfillmentNumber(event.target.value)} />

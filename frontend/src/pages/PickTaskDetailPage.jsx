@@ -18,6 +18,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import * as catalogService from '../services/catalogService.js';
 import * as fulfillmentService from '../services/fulfillmentService.js';
 import * as inventoryService from '../services/inventoryService.js';
+import * as salesService from '../services/salesService.js';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF']);
 const pickSteps = [
@@ -34,6 +35,8 @@ export function PickTaskDetailPage() {
   const [productsById, setProductsById] = useState({});
   const [serials, setSerials] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [draftPackage, setDraftPackage] = useState(null);
+  const [draftFulfillment, setDraftFulfillment] = useState(null);
   const [lines, setLines] = useState([]);
   const [scanQuery, setScanQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -52,10 +55,16 @@ export function PickTaskDetailPage() {
         inventoryService.listInventorySerials(accessToken),
         inventoryService.listInventoryBatches(accessToken),
       ]);
+      const [packageRows, fulfillmentRows] = await Promise.all([
+        fulfillmentService.listPackagesForOrder(accessToken, taskRow.sales_order_id),
+        salesService.listSalesFulfillments(accessToken, taskRow.sales_order_id),
+      ]);
       setTask(taskRow);
       setProductsById(Object.fromEntries(products.map((product) => [product.id, product])));
       setSerials(serialRows);
       setBatches(batchRows);
+      setDraftPackage(packageRows.find((pkg) => pkg.status === 'DRAFT') ?? null);
+      setDraftFulfillment(fulfillmentRows.find((fulfillment) => fulfillment.status === 'DRAFT') ?? null);
       setLines(
         taskRow.items.map((item) => ({
           pick_task_item_id: item.id,
@@ -313,6 +322,29 @@ export function PickTaskDetailPage() {
         </Card>
 
         <StockImpactPreview items={advisoryItems} title="Pick outcome preview" />
+
+        {task.status === 'PICKED' ? (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-warelyn-text">Next step drafts</h2>
+            </CardHeader>
+            <CardBody className="space-y-3 text-sm text-warelyn-muted">
+              <p>The system prepares draft package and draft fulfillment records after picking. Review and complete those steps manually.</p>
+              <div className="flex flex-wrap gap-2">
+                {draftPackage ? (
+                  <Link to={`/packages/${draftPackage.id}`}>
+                    <Button variant="secondary">Open draft package</Button>
+                  </Link>
+                ) : null}
+                {draftFulfillment ? (
+                  <Link to={`/sales-fulfillments/${draftFulfillment.id}`}>
+                    <Button variant="secondary">Open draft fulfillment</Button>
+                  </Link>
+                ) : null}
+              </div>
+            </CardBody>
+          </Card>
+        ) : null}
       </RecordDetailShell>
 
       <ConfirmationModal
