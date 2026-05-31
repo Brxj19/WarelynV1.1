@@ -80,6 +80,19 @@ class FulfillmentRepository:
     def list_packages_for_order(self, tenant_id: int, order_id: int) -> list[Package]:
         return list(self.db.scalars(select(Package).where(Package.tenant_id == tenant_id, Package.sales_order_id == order_id).options(selectinload(Package.items)).order_by(Package.created_at.desc(), Package.id.desc())))
 
+    def get_open_draft_package_for_order(self, tenant_id: int, order_id: int) -> Package | None:
+        return self.db.scalar(
+            select(Package)
+            .where(
+                Package.tenant_id == tenant_id,
+                Package.sales_order_id == order_id,
+                Package.status == PackageStatus.DRAFT,
+            )
+            .options(selectinload(Package.items))
+            .order_by(Package.created_at.desc(), Package.id.desc())
+            .limit(1)
+        )
+
     def get_package(self, tenant_id: int, package_id: int) -> Package | None:
         return self.db.scalar(select(Package).where(Package.id == package_id, Package.tenant_id == tenant_id).options(selectinload(Package.items)))
 
@@ -97,6 +110,15 @@ class FulfillmentRepository:
         self.db.add(record)
         self.db.flush()
         return record
+
+    def get_package_item_by_pick_task_item(self, tenant_id: int, package_id: int, pick_task_item_id: int) -> PackageItem | None:
+        return self.db.scalar(
+            select(PackageItem).where(
+                PackageItem.tenant_id == tenant_id,
+                PackageItem.package_id == package_id,
+                PackageItem.pick_task_item_id == pick_task_item_id,
+            )
+        )
 
     def get_picked_item_for_reservation(self, tenant_id: int, reservation_id: int) -> PickTaskItem | None:
         return self.db.scalar(select(PickTaskItem).join(PickTask, PickTask.id == PickTaskItem.pick_task_id).where(PickTaskItem.tenant_id == tenant_id, PickTaskItem.reservation_id == reservation_id, PickTaskItem.picked_quantity == PickTaskItem.required_quantity, PickTask.status == PickTaskStatus.PICKED).order_by(PickTaskItem.id).limit(1))
