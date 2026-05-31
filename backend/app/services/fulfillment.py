@@ -2,12 +2,13 @@ import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
+import uuid
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.models.fulfillment import Package, PackageStatus, PickTask, PickTaskItemStatus, PickTaskStatus
+from app.models.fulfillment import Package, PackageStatus, PickTask, PickTaskItem, PickTaskItemStatus, PickTaskStatus
 from app.models.inventory import InventoryBatchStatus, InventorySerialStatus, ReservationStatus
 from app.models.sales import SalesOrderStatus
 from app.repositories.fulfillment import FulfillmentRepository
@@ -176,10 +177,9 @@ class FulfillmentService:
             except Exception:
                 pass
             try:
-                self._auto_pack_and_fulfill(tenant_id, pick_task.sales_order_id, result)
+                self._auto_prepare_downstream_drafts(tenant_id, actor_id, pick_task.sales_order_id, result)
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).exception("Auto-pack-and-fulfill failed for order %s: %s", pick_task.sales_order_id, exc)
+                logger.exception("Auto draft preparation failed for order %s: %s", pick_task.sales_order_id, exc)
         return result
 
     def cancel_pick_task(self, tenant_id: int, pick_task_id: int) -> PickTask:
@@ -265,48 +265,106 @@ class FulfillmentService:
         package.cancelled_at = datetime.now(UTC)
         return self._commit_and_get_package(tenant_id, package.id)
 
-    def _auto_pack_and_fulfill(self, tenant_id: int, order_id: int, pick_task) -> None:
-        import uuid
+    def _auto_prepare_downstream_drafts(self, tenant_id: int, actor_id: int, order_id: int, pick_task: PickTask) -> None:
         from app.services.sales import SalesService
-        actor_id = pick_task.created_by
-        if actor_id is None:
-            logger.warning("Auto-pack-and-fulfill skipped for order %s: pick task has no created_by", order_id)
+
+        order = self._require_order(tenant_id, order_id)
+        self._auto_prepare_package_draft(tenant_id, order_id, pick_task)
+        fulfillment_items = self._build_fulfillment_items_for_picked_reservations(tenant_id, order, pick_task)
+        if not fulfillment_items:
+            logger.info("Auto fulfillment draft skipped for order %s: no active picked reservations.", order_id)
             return
 
-        try:
-            order = self._require_order(tenant_id, order_id)
-            package_number = f"PKG-{uuid.uuid4().hex[:8].upper()}"
-            item_ids = [item.id for item in pick_task.items if item.status == PickTaskItemStatus.PICKED]
-            package = self.create_package(tenant_id, order_id, {"package_number": package_number, "pick_task_item_ids": item_ids})
-            self.pack_package(tenant_id, actor_id, package.id, {})
+        sales_service = SalesService(self.db)
+        draft = sales_service.repository.get_open_draft_fulfillment_for_order(tenant_id, order_id)
+        if draft is None:
+            fulfillment_number = f"FUL-AUTO-{uuid.uuid4().hex[:8].upper()}"
+            sales_service.create_fulfillment(
+                tenant_id,
+                actor_id,
+                order_id,
+                {"fulfillment_number": fulfillment_number, "items": fulfillment_items},
+            )
+            return
+        sales_service.update_fulfillment(
+            tenant_id,
+            draft.id,
+            {"items": fulfillment_items},
+        )
 
-            reservations = self.repository.active_reservations_for_order(tenant_id, order.order_number)
-            if not reservations:
-                return
-            fulfillment_number = f"FUL-{uuid.uuid4().hex[:8].upper()}"
-            fulfillment_items = []
-            for reservation in reservations:
-                order_item = next((item for item in order.items if item.product_id == reservation.product_id), None)
-                if order_item is None:
-                    continue
-                fulfillment_items.append({
+    def _auto_prepare_package_draft(self, tenant_id: int, order_id: int, pick_task: PickTask) -> None:
+        draft = self.repository.get_open_draft_package_for_order(tenant_id, order_id)
+        if draft is None:
+            draft = self.repository.create_package(
+                {
+                    "tenant_id": tenant_id,
+                    "sales_order_id": order_id,
+                    "package_number": f"PKG-AUTO-{uuid.uuid4().hex[:8].upper()}",
+                    "status": PackageStatus.DRAFT,
+                    "notes": "System-generated draft package after picking. Pack manually.",
+                }
+            )
+            self.db.commit()
+            draft = self.repository.get_package(tenant_id, draft.id)
+
+        for item in pick_task.items:
+            if item.status != PickTaskItemStatus.PICKED or item.picked_quantity <= ZERO:
+                continue
+            if self.repository.picked_quantity_for_item(tenant_id, item.id) > ZERO:
+                continue
+            existing = self.repository.get_package_item_by_pick_task_item(tenant_id, draft.id, item.id)
+            if existing is not None:
+                continue
+            self.repository.create_package_item(
+                {
+                    "tenant_id": tenant_id,
+                    "package_id": draft.id,
+                    "pick_task_item_id": item.id,
+                    "sales_order_item_id": item.sales_order_item_id,
+                    "product_id": item.product_id,
+                    "batch_id": item.batch_id,
+                    "serial_id": item.serial_id,
+                    "quantity": item.picked_quantity,
+                }
+            )
+        self.db.commit()
+
+    def _build_fulfillment_items_for_picked_reservations(
+        self,
+        tenant_id: int,
+        order,
+        pick_task: PickTask,
+    ) -> list[dict[str, Any]]:
+        picked_by_reservation: dict[int, PickTaskItem] = {}
+        for item in pick_task.items:
+            if item.status != PickTaskItemStatus.PICKED:
+                continue
+            picked_by_reservation[item.reservation_id] = item
+
+        reservations = self.repository.active_reservations_for_order(tenant_id, order.order_number)
+        if not reservations:
+            return []
+
+        order_item_by_product = {item.product_id: item for item in order.items}
+        rows: list[dict[str, Any]] = []
+        for reservation in reservations:
+            picked_item = picked_by_reservation.get(reservation.id)
+            if picked_item is None:
+                continue
+            order_item = order_item_by_product.get(reservation.product_id)
+            if order_item is None:
+                continue
+            rows.append(
+                {
                     "sales_order_item_id": order_item.id,
                     "product_id": reservation.product_id,
                     "warehouse_id": reservation.warehouse_id,
                     "location_id": reservation.location_id,
                     "reservation_id": reservation.id,
                     "fulfilled_quantity": str(reservation.quantity),
-                })
-            if not fulfillment_items:
-                return
-            sales_service = SalesService(self.db)
-            fulfillment = sales_service.create_fulfillment(tenant_id, actor_id, order_id, {"fulfillment_number": fulfillment_number, "items": fulfillment_items})
-            idempotency_key = f"auto-fulfill-{order_id}-{uuid.uuid4().hex[:8]}"
-            sales_service.commit_fulfillment(tenant_id, actor_id, fulfillment.id, {"idempotency_key": idempotency_key})
-        except AppError as exc:
-            # If any step fails, the partial state is left — fulfillment will remain as DRAFT and must be manually committed or cancelled.
-            logger.warning("Auto-pack-and-fulfill could not finish for order %s: %s", order_id, exc)
-            return
+                }
+            )
+        return rows
 
     def _require_order(self, tenant_id: int, order_id: int):
         order = self.repository.get_sales_order(tenant_id, order_id)
