@@ -34,7 +34,3 @@ class UserRead(BaseModel):
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime | None
-
-
-class UserResetPassword(BaseModel):
-    new_password: str = Field(..., min_length=8, max_length=100)

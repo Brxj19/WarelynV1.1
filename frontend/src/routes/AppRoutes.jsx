@@ -18,6 +18,7 @@ const BatchExpiryReportPage = lazy(() => import('../pages/BatchExpiryReportPage.
 const BlockedStockReportPage = lazy(() => import('../pages/BlockedStockReportPage.jsx').then(m => ({ default: m.BlockedStockReportPage })));
 const CatalogMasterPages = lazy(() => import('../pages/CatalogMasterPages.jsx'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage.jsx').then(m => ({ default: m.DashboardPage })));
+const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage.jsx').then(m => ({ default: m.ForgotPasswordPage })));
 const MyTasksPage = lazy(() => import('../pages/MyTasksPage.jsx').then(m => ({ default: m.MyTasksPage })));
 const DocumentsPages = lazy(() => import('../pages/DocumentsPages.jsx'));
 const EmailTemplatesPage = lazy(() => import('../pages/EmailTemplatesPage.jsx').then(m => ({ default: m.EmailTemplatesPage })));
@@ -42,7 +43,6 @@ const PurchaseReceivePage = lazy(() => import('../pages/PurchaseReceivePage.jsx'
 const PurchasesPage = lazy(() => import('../pages/PurchasesPage.jsx').then(m => ({ default: m.PurchasesPage })));
 const RegisterPage = lazy(() => import('../pages/RegisterPage.jsx').then(m => ({ default: m.RegisterPage })));
 const ReconciliationReportPage = lazy(() => import('../pages/ReconciliationReportPage.jsx').then(m => ({ default: m.ReconciliationReportPage })));
-const ReorderSuggestionsPage = lazy(() => import('../pages/ReorderSuggestionsPage.jsx').then(m => ({ default: m.ReorderSuggestionsPage })));
 const ReportsPage = lazy(() => import('../pages/ReportsPage.jsx').then(m => ({ default: m.ReportsPage })));
 const SalesFulfillPage = lazy(() => import('../pages/SalesFulfillPage.jsx').then(m => ({ default: m.SalesFulfillPage })));
 const SalesFulfillmentDetailPage = lazy(() => import('../pages/SalesFulfillmentDetailPage.jsx').then(m => ({ default: m.SalesFulfillmentDetailPage })));
@@ -164,7 +164,6 @@ export function AppRoutes() {
               <Route path="location-stock" element={<LocationStockReportPage />} />
               <Route path="stock-movements" element={<StockMovementReportPage />} />
               <Route path="low-stock" element={<LowStockReportPage />} />
-              <Route path="reorder-suggestions" element={<ReorderSuggestionsPage />} />
               <Route path="product-valuation" element={<ProductValuationReportPage />} />
               <Route path="batch-expiry" element={<BatchExpiryReportPage />} />
               <Route path="serial-status" element={<SerialStatusReportPage />} />
@@ -173,8 +172,8 @@ export function AppRoutes() {
             </Route>
             <Route path="settings" element={<SettingsPage />} />
             <Route path="settings/users" element={<RoleGuard allowedRoles={['TENANT_ADMIN']}><UsersPage /></RoleGuard>} />
-            <Route path="settings/email-templates" element={<RoleGuard allowedRoles={['TENANT_ADMIN']}><EmailTemplatesPage /></RoleGuard>} />
-            <Route path="settings/pdf-templates" element={<RoleGuard allowedRoles={['TENANT_ADMIN']}><PdfTemplatesPage /></RoleGuard>} />
+            <Route path="settings/email-templates" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><EmailTemplatesPage /></RoleGuard>} />
+            <Route path="settings/pdf-templates" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><PdfTemplatesPage /></RoleGuard>} />
             <Route path="verify-email" element={<VerifyEmailPage />} />
             <Route path="verify-phone" element={<VerifyPhonePage />} />
             <Route path="*" element={<NotFoundPage />} />
@@ -193,6 +192,7 @@ export function AppRoutes() {
           <Route element={<AuthLayout />}>
             <Route path="login" element={<LoginPage />} />
             <Route path="register" element={<RegisterPage />} />
+            <Route path="forgot-password" element={<ForgotPasswordPage />} />
           </Route>
         </Route>
         <Route path="/auth" element={<Navigate replace to="/login" />} />

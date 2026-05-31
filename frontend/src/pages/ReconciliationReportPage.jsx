@@ -6,5 +6,21 @@ import { SimpleReportPage } from './ReportsPage.jsx';
 const columns = [{ key: 'product_name', label: 'Product' }, { key: 'sku', label: 'SKU' }, { key: 'warehouse_name', label: 'Warehouse' }, { key: 'location_name', label: 'Location' }, { key: 'expected_on_hand', label: 'Expected OH' }, { key: 'actual_on_hand', label: 'Actual OH' }, { key: 'expected_reserved', label: 'Expected Res' }, { key: 'actual_reserved', label: 'Actual Res' }, { key: 'expected_available', label: 'Expected Avail' }, { key: 'actual_available', label: 'Actual Avail' }];
 
 export function ReconciliationReportPage() {
-  return <SimpleReportPage title="Reconciliation" description="Read-only ledger-to-projection mismatch report." load={reportsService.getReconciliation} columns={columns} loadRows={(data) => data?.mismatches ?? []} summary={(data) => <Card><CardBody className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-warelyn-muted">Mismatch count</p><p className="mt-1 text-2xl font-bold text-warelyn-text">{data?.mismatch_count ?? 0}</p></div><Badge tone={data?.mismatch_count ? 'danger' : 'success'}>{data?.mismatch_count ? 'Needs review' : 'Clean'}</Badge></CardBody></Card>} />;
+  return <SimpleReportPage title="Reconciliation" description="Read-only ledger-to-projection mismatch report." load={reportsService.getReconciliation} columns={columns} loadRows={(data) => {
+    const mismatches = data?.mismatches ?? [];
+    if (mismatches.length > 0) return mismatches;
+    return [{
+      id: 'no-mismatch',
+      product_name: 'No mismatches found',
+      sku: '-',
+      warehouse_name: '-',
+      location_name: '-',
+      expected_on_hand: '0',
+      actual_on_hand: '0',
+      expected_reserved: '0',
+      actual_reserved: '0',
+      expected_available: '0',
+      actual_available: '0',
+    }];
+  }} summary={(data) => <Card><CardBody className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-warelyn-muted">Mismatch count</p><p className="mt-1 text-2xl font-bold text-warelyn-text">{data?.mismatch_count ?? 0}</p></div><Badge tone={data?.mismatch_count ? 'danger' : 'success'}>{data?.mismatch_count ? 'Needs review' : 'Clean'}</Badge></CardBody></Card>} />;
 }

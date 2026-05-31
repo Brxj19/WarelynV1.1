@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { RecordDetailShell } from '../components/ui/RecordDetailShell.jsx';
@@ -98,7 +97,6 @@ export function PurchaseOrderDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/purchases" />
       {error ? <ErrorState description={error} /> : null}
       <RecordDetailShell
         actions={

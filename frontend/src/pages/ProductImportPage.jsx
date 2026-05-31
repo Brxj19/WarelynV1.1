@@ -1,5 +1,4 @@
 import { Download } from 'lucide-react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -76,7 +75,6 @@ export function ProductImportPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/catalog/products" />
       <PageHeader backTo="/catalog/products" description="Upload product master data with preview and validation. This does not import or mutate stock." kicker="Catalog import" title="Import Products — CSV or XLSX" />
       {error ? <ErrorState description={error} /> : null}
       <WorkflowProgress

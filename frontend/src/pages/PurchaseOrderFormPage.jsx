@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader.jsx';
@@ -19,9 +18,11 @@ export function PurchaseOrderFormPage() {
   const isEdit = Boolean(id);
   const { accessToken } = useAuth();
   const navigate = useNavigate();
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [vendors, setVendors] = useState([]);
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState({ vendor_id: '', po_number: '', order_date: new Date().toISOString().slice(0, 10), expected_date: '', notes: '' });
+  const [form, setForm] = useState({ vendor_id: '', po_number: '', order_date: todayIso, expected_date: '', notes: '' });
+  const [createdDateFloor, setCreatedDateFloor] = useState(todayIso);
   const [items, setItems] = useState([{ product_id: '', ordered_quantity: '1', unit_cost: '0', notes: '' }]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,6 +48,7 @@ export function PurchaseOrderFormPage() {
             expected_date: order.expected_date || '',
             notes: order.notes || '',
           });
+          setCreatedDateFloor(order.created_at ? new Date(order.created_at).toISOString().slice(0, 10) : todayIso);
           setItems(order.items.map((item) => ({
             product_id: String(item.product_id),
             ordered_quantity: String(item.ordered_quantity),
@@ -69,8 +71,16 @@ export function PurchaseOrderFormPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setIsSaving(true);
     setError('');
+    if (form.expected_date && form.expected_date < createdDateFloor) {
+      setError('Expected date cannot be earlier than created date.');
+      return;
+    }
+    if (form.expected_date && form.expected_date < form.order_date) {
+      setError('Expected date cannot be earlier than order date.');
+      return;
+    }
+    setIsSaving(true);
     try {
       const payload = {
         ...Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '')),
@@ -95,7 +105,6 @@ export function PurchaseOrderFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to={isEdit ? `/purchases/${id}` : '/purchases'} />
       <PageHeader backTo={isEdit ? `/purchases/${id}` : '/purchases'} description={isEdit ? 'Edit this draft purchase order. Changes are saved when you click Update.' : 'Create a draft purchase order. Stock is not changed until a receipt is committed.'} kicker="Purchasing" title={isEdit ? `Edit ${form.po_number || 'purchase order'}` : 'New purchase order'} />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -105,7 +114,7 @@ export function PurchaseOrderFormPage() {
             <label className="block"><span className="mb-2 block text-sm font-medium text-warelyn-text">Vendor</span><select className={selectClass} required value={form.vendor_id} onChange={(event) => setForm((current) => ({ ...current, vendor_id: event.target.value }))}><option value="">Select vendor</option>{vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></label>
             <Input label="PO number" required value={form.po_number} onChange={(event) => setForm((current) => ({ ...current, po_number: event.target.value }))} />
             <Input label="Order date" required type="date" value={form.order_date} onChange={(event) => setForm((current) => ({ ...current, order_date: event.target.value }))} />
-            <Input label="Expected date" type="date" value={form.expected_date} onChange={(event) => setForm((current) => ({ ...current, expected_date: event.target.value }))} />
+            <Input label="Expected date" min={form.order_date > createdDateFloor ? form.order_date : createdDateFloor} type="date" value={form.expected_date} onChange={(event) => setForm((current) => ({ ...current, expected_date: event.target.value }))} />
             <Input className="md:col-span-2" label="Notes" value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} />
           </CardBody>
         </Card>

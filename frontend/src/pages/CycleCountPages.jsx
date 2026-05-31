@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
@@ -142,7 +141,6 @@ export function CycleCountFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/cycle-counts" />
       <PageHeader backTo="/cycle-counts" description="Create a new cycle count session for a warehouse. Add count lines after creation." kicker="Operations" title="New cycle count" />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={handleSubmit}>
@@ -269,7 +267,6 @@ export function CycleCountDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/cycle-counts" />
       {error ? <ErrorState description={error} /> : null}
       <RecordDetailShell
         actions={

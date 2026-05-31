@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
@@ -295,6 +296,7 @@ export function PutawayTaskDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
 
   async function load() {
     setIsLoading(true);
@@ -381,18 +383,59 @@ export function PutawayTaskDetailPage() {
       {task.status !== 'COMPLETED' && task.status !== 'CANCELLED' && (
         <div className="flex flex-wrap gap-2">
           {task.status === 'PENDING' && (
-            <Button disabled={isBusy} variant="secondary" onClick={() => handleAction(() => startPutawayTask(accessToken, id))}>
+            <Button
+              disabled={isBusy}
+              variant="secondary"
+              onClick={() => setPendingAction({
+                label: 'Start task',
+                description: 'Start this putaway task and mark it as in progress.',
+                variant: 'secondary',
+                run: () => startPutawayTask(accessToken, id),
+              })}
+            >
               <ArrowRight size={16} /> Start
             </Button>
           )}
-          <Button disabled={isBusy} variant="accent" onClick={() => handleAction(() => completePutawayTask(accessToken, id))}>
+          <Button
+            disabled={isBusy}
+            variant="accent"
+            onClick={() => setPendingAction({
+              label: 'Complete putaway',
+              description: 'Complete this putaway task and post the workflow completion.',
+              variant: 'accent',
+              run: () => completePutawayTask(accessToken, id),
+            })}
+          >
             <CheckCircle2 size={16} /> Complete Putaway
           </Button>
-          <Button disabled={isBusy} variant="danger" onClick={() => handleAction(() => cancelPutawayTask(accessToken, id))}>
+          <Button
+            disabled={isBusy}
+            variant="danger"
+            onClick={() => setPendingAction({
+              label: 'Cancel task',
+              description: 'Cancel this putaway task. This cannot be undone.',
+              variant: 'danger',
+              run: () => cancelPutawayTask(accessToken, id),
+            })}
+          >
             <XCircle size={16} /> Cancel
           </Button>
         </div>
       )}
+      <ConfirmationModal
+        open={Boolean(pendingAction)}
+        title="Confirm putaway action"
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.label}
+        variant={pendingAction?.variant ?? 'primary'}
+        isLoading={isBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          const run = pendingAction?.run;
+          setPendingAction(null);
+          if (run) await handleAction(run);
+        }}
+      />
     </div>
   );
 }

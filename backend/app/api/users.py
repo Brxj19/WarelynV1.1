@@ -5,7 +5,7 @@ from app.core.exceptions import AppError
 from app.db.session import get_db
 from app.dependencies.auth import require_tenant_user
 from app.models.auth import UserRole, UserStatus
-from app.schemas.users import UserCreate, UserRead, UserResetPassword, UserUpdate
+from app.schemas.users import UserCreate, UserRead, UserUpdate
 from app.services.auth import UserContext
 from app.services.users import UsersService
 
@@ -65,15 +65,14 @@ def update_user(
     return UserRead.model_validate(user)
 
 
-@router.delete("/{user_id}", response_model=UserRead)
+@router.delete("/{user_id}", status_code=204)
 def delete_user(
     user_id: int,
     context: UserContext = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
-) -> UserRead:
+) -> None:
     service = UsersService(db)
-    user = service.disable_user(context.tenant_id, context.user.id, user_id)
-    return UserRead.model_validate(user)
+    service.delete_user(context.tenant_id, context.user.id, user_id)
 
 
 @router.post("/{user_id}/enable", response_model=UserRead)
@@ -101,10 +100,9 @@ def disable_user(
 @router.post("/{user_id}/reset-password", response_model=UserRead)
 def reset_password(
     user_id: int,
-    data: UserResetPassword,
     context: UserContext = Depends(require_tenant_admin),
     db: Session = Depends(get_db),
 ) -> UserRead:
     service = UsersService(db)
-    user = service.reset_password(context.tenant_id, context.user.id, user_id, data.new_password)
+    user = service.reset_password(context.tenant_id, context.user.id, user_id)
     return UserRead.model_validate(user)

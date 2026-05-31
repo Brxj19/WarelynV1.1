@@ -31,3 +31,24 @@ export function logout(refreshTokenValue) {
     body: JSON.stringify({ refresh_token: refreshTokenValue }),
   });
 }
+
+export function requestPasswordReset(email) {
+  return apiRequest('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function verifyResetCode(email, code) {
+  return apiRequest('/auth/verify-reset-code', {
+    method: 'POST',
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+export function resetPassword(resetToken, newPassword) {
+  return apiRequest('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }),
+  });
+}

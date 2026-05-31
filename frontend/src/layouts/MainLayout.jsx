@@ -10,6 +10,7 @@ import { SidebarNav } from '../components/SidebarNav.jsx';
 import { TopbarSearch } from '../components/TopbarSearch.jsx';
 import { activeGroupFor, flattenNav, resolveRouteMeta } from '../components/navigation.js';
 import { Button } from '../components/ui/Button.jsx';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { TenantSettingsProvider } from '../context/TenantSettingsContext.jsx';
 import { setGlobalErrorHandler } from '../services/apiClient.js';
@@ -25,6 +26,8 @@ export function MainLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => window.localStorage.getItem('warelyn.sidebarCollapsed') === 'true');
   const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const navItems = useMemo(() => flattenNav(user?.role), [user?.role]);
   const [openGroup, setOpenGroup] = useState(() => activeGroupFor(location.pathname, user?.role));
   const [history, setHistory] = useState(() => JSON.parse(window.localStorage.getItem('warelyn.recentPages') || '[]'));
@@ -53,6 +56,16 @@ export function MainLayout() {
     setGlobalErrorHandler((msg, type) => toast[type]?.(msg));
     return () => setGlobalErrorHandler(null);
   }, [toast]);
+
+  async function confirmSignOut() {
+    setIsSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsSigningOut(false);
+      setIsSignOutConfirmOpen(false);
+    }
+  }
 
   return (
     <TenantSettingsProvider>
@@ -129,9 +142,9 @@ export function MainLayout() {
                   ) : null}
                   <button
                     className="popover-row"
-                    onClick={async () => {
+                    onClick={() => {
                       setIsAccountOpen(false);
-                      await logout();
+                      setIsSignOutConfirmOpen(true);
                     }}
                     type="button"
                   >
@@ -192,6 +205,16 @@ export function MainLayout() {
           </div>
         </main>
       </div>
+      <ConfirmationModal
+        open={isSignOutConfirmOpen}
+        title="Sign out?"
+        description="Are you sure you want to end this session?"
+        confirmLabel="Sign out"
+        variant="danger"
+        isLoading={isSigningOut}
+        onCancel={() => setIsSignOutConfirmOpen(false)}
+        onConfirm={confirmSignOut}
+      />
     </div>
     </TenantSettingsProvider>
   );

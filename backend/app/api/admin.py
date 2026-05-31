@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.dependencies.auth import require_super_admin
 from app.models.auth import UserRole
-from app.schemas.admin import PlatformSummary, TenantAdminDetail, TenantAdminListRow, TenantEnableDisableResponse
+from app.schemas.admin import PlatformDashboard, PlatformSummary, TenantAdminDetail, TenantAdminListRow, TenantEnableDisableResponse
 from app.services.admin import AdminService
 from app.services.auth import UserContext
 
@@ -19,6 +19,11 @@ def platform_summary(context: UserContext = Depends(require_super_admin), db: Se
 @router.get("/platform/health")
 def platform_health(context: UserContext = Depends(require_super_admin), db: Session = Depends(get_db)) -> dict:
     return AdminService(db).get_platform_health()
+
+
+@router.get("/platform/dashboard", response_model=PlatformDashboard)
+def platform_dashboard(context: UserContext = Depends(require_super_admin), db: Session = Depends(get_db)) -> PlatformDashboard:
+    return AdminService(db).get_platform_dashboard()
 
 
 @router.get("/tenants", response_model=list[TenantAdminListRow])

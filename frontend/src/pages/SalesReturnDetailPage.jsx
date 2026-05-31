@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { Link, useParams } from 'react-router-dom';
 
 import { StatusBadge } from '../components/ui/Badge.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
@@ -41,6 +41,7 @@ export function SalesReturnDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   async function load() {
     setIsLoading(true);
@@ -86,7 +87,6 @@ export function SalesReturnDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/returns" />
       {error ? <ErrorState description={error} /> : null}
       <RecordDetailShell
         actions={
@@ -97,12 +97,31 @@ export function SalesReturnDetailPage() {
               </Link>
             ) : null}
             {canWrite.has(user?.role) && salesReturn.status === 'DRAFT' ? (
-              <Button disabled={isSaving} onClick={() => run(returnsService.submitSalesReturn)}>
+              <Button
+                disabled={isSaving}
+                onClick={() =>
+                  setPendingAction({
+                    label: 'Submit return',
+                    description: 'Submit this return for QC inspection.',
+                    variant: 'primary',
+                    action: returnsService.submitSalesReturn,
+                  })}
+              >
                 Submit
               </Button>
             ) : null}
             {canWrite.has(user?.role) && ['DRAFT', 'SUBMITTED', 'INSPECTION_PENDING'].includes(salesReturn.status) ? (
-              <Button disabled={isSaving} variant="danger" onClick={() => run(returnsService.cancelSalesReturn)}>
+              <Button
+                disabled={isSaving}
+                variant="danger"
+                onClick={() =>
+                  setPendingAction({
+                    label: 'Cancel return',
+                    description: 'Cancel this return. QC processing will no longer be allowed.',
+                    variant: 'danger',
+                    action: returnsService.cancelSalesReturn,
+                  })}
+              >
                 Cancel
               </Button>
             ) : null}
@@ -210,6 +229,20 @@ export function SalesReturnDetailPage() {
           </CardBody>
         </Card>
       </RecordDetailShell>
+      <ConfirmationModal
+        open={Boolean(pendingAction)}
+        title="Confirm return action"
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.label}
+        variant={pendingAction?.variant ?? 'primary'}
+        isLoading={isSaving}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          const action = pendingAction?.action;
+          setPendingAction(null);
+          if (action) await run(action);
+        }}
+      />
     </div>
   );
 }

@@ -48,9 +48,11 @@ class AuditLogRepository:
         query = query.order_by(AuditLog.created_at.desc()).offset(offset).limit(limit)
         return list(self.db.scalars(query))
 
-    def count_logs(self, tenant_id: int | None = None) -> int:
+    def count_logs(self, tenant_id: int | None = None, since: datetime | None = None) -> int:
         from sqlalchemy import func as sa_func
         query = select(sa_func.count(AuditLog.id))
         if tenant_id is not None:
             query = query.where(AuditLog.tenant_id == tenant_id)
+        if since is not None:
+            query = query.where(AuditLog.created_at >= since)
         return self.db.scalar(query) or 0

@@ -4913,6 +4913,14 @@ _ACCOUNT_CREATED_HTML = '''<!DOCTYPE html>
 <tr><td style="padding:4px 0;font-size:14px;color:#64748B;">Email:</td><td style="padding:4px 0 4px 12px;font-size:14px;color:#0F172A;font-weight:600;">{{ email }}</td></tr>
 <tr><td style="padding:4px 0;font-size:14px;color:#64748B;">Role:</td><td style="padding:4px 0 4px 12px;font-size:14px;color:#0F172A;font-weight:600;">{{ role }}</td></tr>
 </table>
+<div style="margin:0 0 24px;padding:14px;border:1px solid #DBEAFE;background:#EFF6FF;border-radius:8px;">
+<p style="margin:0 0 10px;font-size:14px;font-weight:600;color:#1E3A8A;">First-time sign in instructions</p>
+<ol style="margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.6;">
+<li>Open <a href="{{ login_url }}" style="color:#2563EB;">Sign In</a>.</li>
+<li>Click <a href="{{ forgot_password_url|default('/forgot-password') }}" style="color:#2563EB;">Forgot password?</a>.</li>
+<li>Use your email to receive a reset code and set your password.</li>
+</ol>
+</div>
 <a href="{{ login_url }}" style="display:inline-block;background:#2563EB;color:#FFFFFF;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none;">Sign In</a>
 </td></tr>
 <tr><td style="background:#F8FAFC;border-top:1px solid #E2E8F0;padding:20px 40px;">
@@ -4927,6 +4935,11 @@ Your account has been created on {{ tenant_name }}.
 
 Email: {{ email }}
 Role: {{ role }}
+
+First-time sign in instructions:
+1. Open Sign In: {{ login_url }}
+2. Click Forgot password?: {{ forgot_password_url|default('/forgot-password') }}
+3. Use your email to receive a reset code and set your password.
 
 Sign in at: {{ login_url }}
 

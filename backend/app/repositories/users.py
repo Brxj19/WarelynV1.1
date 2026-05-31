@@ -73,6 +73,10 @@ class UsersRepository:
         self.db.flush()
         return user
 
+    def delete_user(self, user: User) -> None:
+        self.db.delete(user)
+        self.db.flush()
+
     def count_users(self, tenant_id: int) -> int:
         result = self.db.scalar(
             select(func.count(User.id)).where(User.tenant_id == tenant_id)

@@ -62,7 +62,7 @@ class _NotificationRepo:
             .where(Notification.id == notification_id)
             .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
-        self.db.flush()
+        self.db.commit()
 
     def mark_all_read(self, user_id: int, tenant_id: int | None) -> None:
         self.db.execute(
@@ -75,14 +75,14 @@ class _NotificationRepo:
             )
             .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
-        self.db.flush()
+        self.db.commit()
 
     def clear_one(self, notification_id: int, user_id: int, tenant_id: int | None) -> Notification | None:
         notification = self.get_by_id(notification_id)
         if notification is None or notification.user_id != user_id or notification.tenant_id != tenant_id:
             return None
         notification.cleared_at = datetime.now(timezone.utc)
-        self.db.flush()
+        self.db.commit()
         return notification
 
     def clear_all(self, user_id: int, tenant_id: int | None) -> None:
@@ -95,7 +95,7 @@ class _NotificationRepo:
             )
             .values(cleared_at=datetime.now(timezone.utc))
         )
-        self.db.flush()
+        self.db.commit()
 
 
 class NotificationRepository:

@@ -15,8 +15,24 @@ export async function apiRequest(path, options = {}) {
     ...fetchOptions,
   });
 
+  if (response.status === 204 || response.status === 205) {
+    if (!response.ok) {
+      const error = new Error('API request failed.');
+      error.status = response.status;
+      throw error;
+    }
+    return null;
+  }
+
   const contentType = response.headers.get('content-type') ?? '';
-  const payload = contentType.includes('application/json') ? await response.json() : null;
+  let payload = null;
+  if (contentType.includes('application/json')) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
 
   if (!response.ok) {
     const errorMessage = payload?.error?.message ?? 'API request failed.';

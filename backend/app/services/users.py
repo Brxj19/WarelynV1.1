@@ -1,5 +1,6 @@
 import logging
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
@@ -96,6 +97,7 @@ class UsersService:
             "role": user.role.value,
             "tenant_name": tenant_name,
             "login_url": "/login",
+            "forgot_password_url": "/forgot-password",
         })
 
         # Create notifications
@@ -232,16 +234,17 @@ class UsersService:
 
         return user
 
-    def reset_password(self, tenant_id: int, actor_user_id: int, user_id: int, new_password: str) -> User:
+    def reset_password(self, tenant_id: int, actor_user_id: int, user_id: int) -> User:
         user = self.get_user(tenant_id, user_id)
-        user.password_hash = get_password_hash(new_password)
-        self.db.flush()
+
+        from app.services.auth import AuthService
+        AuthService(self.db).send_admin_password_reset_link(user)
 
         self.audit.create({
             "tenant_id": tenant_id,
             "actor_user_id": actor_user_id,
             "actor_role": UserRole.TENANT_ADMIN.value,
-            "action": "USER_PASSWORD_RESET",
+            "action": "USER_PASSWORD_RESET_LINK_SENT",
             "entity_type": "User",
             "entity_id": str(user.id),
             "metadata_json": {"name": user.name, "email": user.email},
@@ -250,19 +253,43 @@ class UsersService:
         self.db.commit()
         self.db.refresh(user)
 
-        # Send password reset email (non-blocking)
-        tenant_name = self._get_tenant_name(tenant_id)
-        self._send_user_email(tenant_id, user, DocumentTemplateKey.PASSWORD_RESET, {
-            "user_name": user.name,
-            "tenant_name": tenant_name,
-        })
         self._notify_user_event(
             tenant_id, user.id, actor_user_id,
-            "Password Reset",
-            f"Password was reset for {user.name}.",
+            "Password Reset Link Sent",
+            f"A password reset link was sent to {user.name}.",
         )
 
         return user
+
+    def delete_user(self, tenant_id: int, actor_user_id: int, user_id: int) -> None:
+        if user_id == actor_user_id:
+            raise AppError("FORBIDDEN", "Cannot delete yourself.", 403)
+
+        user = self.get_user(tenant_id, user_id)
+        user_name = user.name
+        user_email = user.email
+        user_role = user.role.value
+
+        self.audit.create({
+            "tenant_id": tenant_id,
+            "actor_user_id": actor_user_id,
+            "actor_role": UserRole.TENANT_ADMIN.value,
+            "action": "USER_DELETED",
+            "entity_type": "User",
+            "entity_id": str(user.id),
+            "metadata_json": {"name": user_name, "email": user_email, "role": user_role},
+        })
+
+        try:
+            self.repo.delete_user(user)
+            self.db.commit()
+        except IntegrityError as exc:
+            self.db.rollback()
+            raise AppError(
+                "USER_DELETE_CONFLICT",
+                "This user cannot be deleted because business records are linked to this account. Disable the user instead.",
+                409,
+            ) from exc
 
     # ------------------------------------------------------------------
     # Helpers
@@ -292,6 +319,7 @@ class UsersService:
                 template_key=template_key,
                 context=context,
             )
+            rendered = self._augment_account_created_email(rendered, template_key, context)
             send_email(
                 to_email=user.email,
                 subject=rendered["subject"] or "",
@@ -300,6 +328,56 @@ class UsersService:
             )
         except Exception as exc:
             logger.warning(f"Failed to send user email ({template_key.value}): {exc}")
+
+    def _augment_account_created_email(
+        self,
+        rendered: dict,
+        template_key: DocumentTemplateKey,
+        context: dict,
+    ) -> dict:
+        """Ensure account-created emails include forgot-password onboarding instructions."""
+        if template_key != DocumentTemplateKey.ACCOUNT_CREATED:
+            return rendered
+
+        login_url = context.get("login_url") or "/login"
+        forgot_password_url = context.get("forgot_password_url") or "/forgot-password"
+
+        body_html = rendered.get("body") or ""
+        body_text = rendered.get("text") or ""
+
+        marker = "forgot password"
+        if marker not in body_html.lower():
+            html_instructions = (
+                "<div style='margin-top:20px;padding:14px;border:1px solid #DBEAFE;"
+                "background:#EFF6FF;border-radius:8px;'>"
+                "<p style='margin:0 0 10px;font-size:14px;font-weight:600;color:#1E3A8A;'>"
+                "First-time sign in instructions</p>"
+                "<ol style='margin:0;padding-left:18px;font-size:13px;color:#334155;line-height:1.6;'>"
+                f"<li>Open <a href='{login_url}' style='color:#2563EB;'>Sign In</a>.</li>"
+                f"<li>Click <a href='{forgot_password_url}' style='color:#2563EB;'>Forgot password?</a>.</li>"
+                "<li>Use your email to receive a reset code and set your password.</li>"
+                "</ol>"
+                "</div>"
+            )
+            if "</td></tr>" in body_html:
+                body_html = body_html.replace("</td></tr>", f"{html_instructions}</td></tr>", 1)
+            else:
+                body_html = f"{body_html}\n{html_instructions}"
+
+        if marker not in body_text.lower():
+            text_instructions = (
+                "\n\nFirst-time sign in instructions:\n"
+                f"1. Open Sign In: {login_url}\n"
+                f"2. Click Forgot password?: {forgot_password_url}\n"
+                "3. Use your email to receive a reset code and set your password.\n"
+            )
+            body_text = f"{body_text}{text_instructions}"
+
+        return {
+            **rendered,
+            "body": body_html,
+            "text": body_text,
+        }
 
     def _notify_user_event(
         self,

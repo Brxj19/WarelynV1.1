@@ -77,3 +77,39 @@ def send_verification_email(to_email: str, code: str) -> None:
         f"<p>If you did not request this, please ignore this email.</p>"
     )
     send_email(to_email, subject, body_text, body_html)
+
+
+def send_password_reset_email(to_email: str, code: str) -> None:
+    subject = "Reset your Warelyn password"
+    body_text = (
+        f"Your Warelyn password reset code is: {code}\n\n"
+        f"This code will expire in 15 minutes.\n\n"
+        f"If you did not request this, please ignore this email."
+    )
+    body_html = (
+        f"<h2>Warelyn Password Reset</h2>"
+        f"<p>Your password reset code is:</p>"
+        f"<h1 style='letter-spacing:8px;font-size:32px;color:#1e40af;'>{code}</h1>"
+        f"<p>This code will expire in 15 minutes.</p>"
+        f"<p>If you did not request this, please ignore this email.</p>"
+    )
+    send_email(to_email, subject, body_text, body_html)
+
+
+def send_password_reset_link_email(to_email: str, reset_url: str) -> None:
+    subject = "Reset your Warelyn password"
+    body_text = (
+        "A password reset was requested for your Warelyn account.\n\n"
+        f"Reset your password using this secure link:\n{reset_url}\n\n"
+        "This link will expire in 15 minutes.\n\n"
+        "If you did not request this, please ignore this email."
+    )
+    body_html = (
+        "<h2>Warelyn Password Reset</h2>"
+        "<p>A password reset was requested for your account.</p>"
+        f"<p><a href='{reset_url}' style='display:inline-block;background:#1e40af;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none;'>Reset password</a></p>"
+        f"<p>If the button does not work, copy this URL:<br><a href='{reset_url}'>{reset_url}</a></p>"
+        "<p>This link will expire in 15 minutes.</p>"
+        "<p>If you did not request this, please ignore this email.</p>"
+    )
+    send_email(to_email, subject, body_text, body_html)

@@ -11,6 +11,7 @@ from app.models.operations import PutawayTask, PutawayTaskStatus, StockCountSess
 from app.repositories.inventory import InventoryRepository
 from app.repositories.operations import CycleCountRepository, OutboxRepository, PutawayTaskRepository, ReorderRuleRepository
 from app.schemas.workflow import WorkflowTaskCreate
+from app.services.notification import NotificationService
 from app.services.workflow import WorkflowService
 
 
@@ -87,6 +88,7 @@ class PutawayTaskService:
         task.completed_at = datetime.now(UTC)
         self.db.commit()
         self.db.refresh(task)
+        purchase_order_id: int | None = None
         try:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "PUTAWAY_COMPLETED", "putaway_task", task.id, actor_id, {"receipt_id": task.receipt_id})
@@ -98,6 +100,7 @@ class PutawayTaskService:
                 from app.repositories.purchasing import PurchasingRepository
                 receipt = PurchasingRepository(self.db).get_receipt(tenant_id, task.receipt_id)
                 if receipt and receipt.purchase_order_id:
+                    purchase_order_id = receipt.purchase_order_id
                     workflow.create_task(tenant_id, WorkflowTaskCreate(
                         workflow_type="PURCHASING",
                         entity_type="purchase_order",
@@ -110,6 +113,23 @@ class PutawayTaskService:
                         action_url=f"/bills",
                     ))
             self.db.commit()
+        except Exception:
+            pass
+        try:
+            action_url = "/bills"
+            if purchase_order_id is not None:
+                action_url = f"/bills/new?purchase_order_id={purchase_order_id}"
+            NotificationService(self.db).notify_role(
+                tenant_id,
+                "PURCHASE_STAFF",
+                title="Putaway complete - record the vendor bill",
+                message="Stock has been put away. Please record the vendor bill.",
+                type="INFO",
+                category="PURCHASE",
+                entity_type="putaway_task",
+                entity_id=task.id,
+                action_url=action_url,
+            )
         except Exception:
             pass
         return task

@@ -238,3 +238,98 @@ def test_require_tenant_user_rejects_super_admin() -> None:
         assert exc.code == "TENANT_ACCESS_DENIED"
     else:
         raise AssertionError("Expected AppError")
+
+
+def test_forgot_password_unknown_email_returns_204(client: TestClient) -> None:
+    response = client.post("/api/auth/forgot-password", json={"email": "unknown@example.com"})
+    assert response.status_code == 204
+    assert response.content == b""
+
+
+def test_verify_reset_code_returns_token_for_valid_email(client: TestClient, monkeypatch) -> None:
+    register_user(client, "reset-user@example.com")
+    captured = {"code": None}
+
+    def fake_send_password_reset_email(to_email: str, code: str) -> None:
+        assert to_email == "reset-user@example.com"
+        captured["code"] = code
+
+    monkeypatch.setattr("app.services.auth.send_password_reset_email", fake_send_password_reset_email)
+
+    forgot = client.post("/api/auth/forgot-password", json={"email": "reset-user@example.com"})
+    assert forgot.status_code == 204
+    assert captured["code"] is not None
+
+    verify = client.post(
+        "/api/auth/verify-reset-code",
+        json={"email": "reset-user@example.com", "code": captured["code"]},
+    )
+    assert verify.status_code == 200
+    assert verify.json()["reset_token"]
+
+
+def test_reset_password_changes_credentials(client: TestClient, monkeypatch) -> None:
+    register_user(client, "reset-password@example.com")
+    captured = {"code": None}
+
+    def fake_send_password_reset_email(to_email: str, code: str) -> None:
+        assert to_email == "reset-password@example.com"
+        captured["code"] = code
+
+    monkeypatch.setattr("app.services.auth.send_password_reset_email", fake_send_password_reset_email)
+
+    forgot = client.post("/api/auth/forgot-password", json={"email": "reset-password@example.com"})
+    assert forgot.status_code == 204
+    verify = client.post(
+        "/api/auth/verify-reset-code",
+        json={"email": "reset-password@example.com", "code": captured["code"]},
+    )
+    assert verify.status_code == 200
+    reset_token = verify.json()["reset_token"]
+
+    reset = client.post(
+        "/api/auth/reset-password",
+        json={"reset_token": reset_token, "new_password": "NewStrongPass123!"},
+    )
+    assert reset.status_code == 204
+
+    old_login = client.post("/api/auth/login", json={"email": "reset-password@example.com", "password": "StrongPass123!"})
+    assert old_login.status_code == 401
+    assert old_login.json()["error"]["code"] == "INVALID_CREDENTIALS"
+
+    new_login = client.post("/api/auth/login", json={"email": "reset-password@example.com", "password": "NewStrongPass123!"})
+    assert new_login.status_code == 200
+    assert new_login.json()["access_token"]
+
+
+def test_reset_token_cannot_be_used_twice(client: TestClient, monkeypatch) -> None:
+    register_user(client, "reset-twice@example.com")
+    captured = {"code": None}
+
+    def fake_send_password_reset_email(to_email: str, code: str) -> None:
+        assert to_email == "reset-twice@example.com"
+        captured["code"] = code
+
+    monkeypatch.setattr("app.services.auth.send_password_reset_email", fake_send_password_reset_email)
+
+    forgot = client.post("/api/auth/forgot-password", json={"email": "reset-twice@example.com"})
+    assert forgot.status_code == 204
+    verify = client.post(
+        "/api/auth/verify-reset-code",
+        json={"email": "reset-twice@example.com", "code": captured["code"]},
+    )
+    assert verify.status_code == 200
+    reset_token = verify.json()["reset_token"]
+
+    first = client.post(
+        "/api/auth/reset-password",
+        json={"reset_token": reset_token, "new_password": "NewStrongPass123!"},
+    )
+    second = client.post(
+        "/api/auth/reset-password",
+        json={"reset_token": reset_token, "new_password": "AnotherStrongPass123!"},
+    )
+
+    assert first.status_code == 204
+    assert second.status_code == 400
+    assert second.json()["error"]["code"] == "RESET_TOKEN_ALREADY_USED"

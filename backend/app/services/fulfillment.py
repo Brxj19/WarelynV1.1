@@ -111,7 +111,12 @@ class FulfillmentService:
                 if quantity < ZERO or quantity > item.required_quantity:
                     raise AppError("PICK_QUANTITY_INVALID", "Picked quantity cannot exceed required quantity.", 400)
                 reservation = self.repository.get_reservation(tenant_id, item.reservation_id)
+                # When a pick task is reused after a partial fulfillment commit, previously
+                # picked lines can reference reservations that are now DEDUCTED. If the line is
+                # being resubmitted unchanged, treat it as an idempotent no-op.
                 if reservation is None or reservation.status != ReservationStatus.ACTIVE:
+                    if item.status == PickTaskItemStatus.PICKED and quantity == item.picked_quantity:
+                        continue
                     raise AppError("INVALID_RESERVATION_STATE", "Picking requires an active reservation.", 409)
                 if quantity > reservation.quantity:
                     raise AppError("PICK_QUANTITY_INVALID", "Picked quantity cannot exceed active reservation quantity.", 400)

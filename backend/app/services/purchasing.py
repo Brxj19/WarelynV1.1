@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -14,6 +14,7 @@ from app.repositories.documents import DocumentsRepository
 from app.repositories.purchasing import PurchasingRepository
 from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.services.workflow import WorkflowService
 
 RECEIVABLE_STATUSES = {PurchaseOrderStatus.APPROVED, PurchaseOrderStatus.PARTIALLY_RECEIVED}
@@ -35,6 +36,11 @@ class PurchasingService:
 
     def create_purchase_order(self, tenant_id: int, actor_id: int, values: dict[str, Any]) -> PurchaseOrder:
         self._require_vendor(tenant_id, values["vendor_id"])
+        self._validate_expected_date(
+            values.get("order_date"),
+            values.get("expected_date"),
+            min_reference_date=datetime.now(UTC).date(),
+        )
         items = values.pop("items", [])
         po = self.repository.create_purchase_order({**values, "tenant_id": tenant_id, "created_by": actor_id, "status": PurchaseOrderStatus.DRAFT})
         self._replace_order_items(tenant_id, po.id, items)
@@ -46,6 +52,11 @@ class PurchasingService:
             raise AppError("INVALID_PURCHASE_ORDER_STATE", "Only draft purchase orders can be edited.", 409)
         if values.get("vendor_id"):
             self._require_vendor(tenant_id, values["vendor_id"])
+        self._validate_expected_date(
+            values.get("order_date", po.order_date),
+            values.get("expected_date", po.expected_date),
+            min_reference_date=po.created_at.date(),
+        )
         items = values.pop("items", None)
         for key, value in values.items():
             setattr(po, key, value)
@@ -63,10 +74,10 @@ class PurchasingService:
         po.status = PurchaseOrderStatus.SUBMITTED
         po.submitted_at = datetime.now(UTC)
         result = self._commit_and_get_po(tenant_id, po.id)
+        total_value = sum((item.unit_cost or Decimal("0")) * item.ordered_quantity for item in result.items)
         try:
             workflow = WorkflowService(self.db)
             workflow.log_event(tenant_id, "PURCHASE_ORDER_SUBMITTED", "purchase_order", po.id, actor_id, {"po_number": po.po_number})
-            total_value = sum((item.unit_cost or Decimal("0")) * item.ordered_quantity for item in result.items)
             workflow.create_task(tenant_id, WorkflowTaskCreate(
                 workflow_type="PURCHASING",
                 entity_type="purchase_order",
@@ -81,6 +92,22 @@ class PurchasingService:
             self.db.commit()
         except Exception:
             pass
+        if total_value > Decimal("10000"):
+            try:
+                NotificationService(self.db).notify_role(
+                    tenant_id,
+                    "TENANT_ADMIN",
+                    title=f"PO {po.po_number} awaiting your approval",
+                    message="High-value purchase order requires approval before processing.",
+                    type="WARNING",
+                    category="PURCHASE",
+                    priority="high",
+                    entity_type="purchase_order",
+                    entity_id=po.id,
+                    action_url=f"/purchases/{po.id}",
+                )
+            except Exception:
+                pass
         return result
 
     def approve_purchase_order(self, tenant_id: int, po_id: int, actor_id: int) -> PurchaseOrder:
@@ -242,6 +269,20 @@ class PurchasingService:
             self.db.commit()
         except Exception:
             pass
+        try:
+            NotificationService(self.db).notify_role(
+                tenant_id,
+                "INVENTORY_MANAGER",
+                title="Stock received - putaway required",
+                message=f"Purchase receipt committed for PO {po.po_number}. Please complete the putaway.",
+                type="INFO",
+                category="PURCHASE",
+                entity_type="purchase_receipt",
+                entity_id=receipt.id,
+                action_url=f"/purchase-receipts/{receipt.id}",
+            )
+        except Exception:
+            pass
 
         # Check auto-close
         try:
@@ -369,6 +410,19 @@ class PurchasingService:
     def _require_vendor(self, tenant_id: int, vendor_id: int) -> None:
         if self.repository.get_vendor(tenant_id, vendor_id) is None:
             raise AppError("VENDOR_NOT_FOUND", "Vendor was not found for this tenant.", 404)
+
+    def _validate_expected_date(
+        self,
+        order_date: date | None,
+        expected_date: date | None,
+        min_reference_date: date | None = None,
+    ) -> None:
+        if expected_date is None or order_date is None:
+            return
+        if expected_date < order_date:
+            raise AppError("INVALID_EXPECTED_DATE", "Expected date cannot be earlier than order date.", 400)
+        if min_reference_date is not None and expected_date < min_reference_date:
+            raise AppError("INVALID_EXPECTED_DATE", "Expected date cannot be earlier than created date.", 400)
 
     def _require_product(self, tenant_id: int, product_id: int):
         product = self.repository.get_product(tenant_id, product_id)

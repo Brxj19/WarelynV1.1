@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '../components/ui/PageHeader.jsx';
@@ -20,13 +19,15 @@ export function SalesOrderFormPage() {
   const isEdit = Boolean(id);
   const { accessToken } = useAuth();
   const navigate = useNavigate();
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
   const [stockByProduct, setStockByProduct] = useState({});
+  const [createdDateFloor, setCreatedDateFloor] = useState(todayIso);
   const [form, setForm] = useState({
     customer_id: '',
     order_number: `SO-${Date.now()}`,
-    order_date: new Date().toISOString().slice(0, 10),
+    order_date: todayIso,
     expected_ship_date: '',
     notes: '',
   });
@@ -65,6 +66,7 @@ export function SalesOrderFormPage() {
             expected_ship_date: order.expected_ship_date || '',
             notes: order.notes || '',
           });
+          setCreatedDateFloor(order.created_at ? new Date(order.created_at).toISOString().slice(0, 10) : todayIso);
           setItems(order.items.map((item) => ({
             product_id: String(item.product_id),
             ordered_quantity: String(item.ordered_quantity),
@@ -89,8 +91,16 @@ export function SalesOrderFormPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setIsSaving(true);
     setError('');
+    if (form.expected_ship_date && form.expected_ship_date < createdDateFloor) {
+      setError('Expected ship date cannot be earlier than created date.');
+      return;
+    }
+    if (form.expected_ship_date && form.expected_ship_date < form.order_date) {
+      setError('Expected ship date cannot be earlier than order date.');
+      return;
+    }
+    setIsSaving(true);
     try {
       const payload = {
         ...Object.fromEntries(Object.entries(form).filter(([, value]) => value !== '')),
@@ -117,7 +127,6 @@ export function SalesOrderFormPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to={isEdit ? `/sales/${id}` : '/sales'} />
       <PageHeader
         backTo={isEdit ? `/sales/${id}` : '/sales'}
         description={isEdit ? 'Edit this draft sales order. Changes are saved when you click Update.' : 'Create a draft sales order first. Stock is only reserved later during confirmation with warehouse and location allocation.'}
@@ -162,6 +171,7 @@ export function SalesOrderFormPage() {
             />
             <Input
               label="Expected ship date"
+              min={form.order_date > createdDateFloor ? form.order_date : createdDateFloor}
               type="date"
               value={form.expected_ship_date}
               onChange={(event) => setForm((current) => ({ ...current, expected_ship_date: event.target.value }))}

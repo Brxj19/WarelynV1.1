@@ -8,6 +8,10 @@ export function getPlatformHealth(accessToken) {
   return apiRequest('/admin/platform/health', { accessToken });
 }
 
+export function getPlatformDashboard(accessToken) {
+  return apiRequest('/admin/platform/dashboard', { accessToken });
+}
+
 export function listTenants(accessToken, search, status) {
   const params = new URLSearchParams();
   if (search) params.set('search', search);

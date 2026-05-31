@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app.models.communication import OTPPurpose, OTPSource, OTPVerification
 from app.models.auth import RefreshToken, Tenant, TenantStatus, User, UserRole, UserStatus
 
 
@@ -65,6 +66,54 @@ class UserRepository:
         self.db.flush()
         return user
 
+    def create_password_reset_otp(self, user_id: int, tenant_id: int | None, email: str, code_hash: str) -> OTPVerification:
+        self.db.execute(
+            update(OTPVerification)
+            .where(
+                OTPVerification.user_id == user_id,
+                OTPVerification.purpose == OTPPurpose.PASSWORD_RESET,
+                OTPVerification.consumed_at == None,
+                OTPVerification.superseded_at == None,
+            )
+            .values(superseded_at=datetime.now(timezone.utc))
+        )
+        otp = OTPVerification(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            destination_type=OTPSource.EMAIL,
+            destination=email,
+            purpose=OTPPurpose.PASSWORD_RESET,
+            code_hash=code_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+            max_attempts=5,
+        )
+        self.db.add(otp)
+        self.db.flush()
+        return otp
+
+    def get_active_reset_otp(self, user_id: int) -> OTPVerification | None:
+        return self.db.scalar(
+            select(OTPVerification)
+            .where(
+                OTPVerification.user_id == user_id,
+                OTPVerification.purpose == OTPPurpose.PASSWORD_RESET,
+                OTPVerification.consumed_at == None,
+                OTPVerification.superseded_at == None,
+                OTPVerification.expires_at > datetime.now(timezone.utc),
+            )
+            .order_by(OTPVerification.created_at.desc())
+            .limit(1)
+        )
+
+    def get_otp_by_id(self, otp_id: int) -> OTPVerification | None:
+        return self.db.get(OTPVerification, otp_id)
+
+    def consume_reset_otp(self, otp_id: int) -> None:
+        self.db.execute(
+            update(OTPVerification).where(OTPVerification.id == otp_id).values(consumed_at=datetime.now(timezone.utc))
+        )
+        self.db.flush()
+
 
 class RefreshTokenRepository:
     def __init__(self, db: Session) -> None:
@@ -83,3 +132,14 @@ class RefreshTokenRepository:
         refresh_token.revoked_at = datetime.now(UTC)
         self.db.flush()
         return refresh_token
+
+    def revoke_all_for_user(self, user_id: int) -> None:
+        self.db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at == None,
+            )
+            .values(revoked_at=datetime.now(UTC))
+        )
+        self.db.flush()

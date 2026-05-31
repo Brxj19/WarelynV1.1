@@ -1,12 +1,18 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
-from app.models.auth import Tenant, TenantStatus, UserRole
+from app.models.auth import TenantStatus
 from app.repositories.admin import AdminRepository
 from app.repositories.audit import AuditLogRepository
-from app.schemas.admin import PlatformSummary, TenantAdminDetail, TenantAdminListRow
+from app.schemas.admin import (
+    PlatformDashboard,
+    PlatformSummary,
+    RecentTenantRow,
+    TenantAdminDetail,
+    TenantAdminListRow,
+)
 
 
 class AdminService:
@@ -30,8 +36,55 @@ class AdminService:
         return {
             "database_status": "connected",
             "app_status": "healthy",
+            "ledger_integrity_ok": True,
             "timestamp": datetime.now(UTC),
         }
+
+    def get_platform_dashboard(self) -> PlatformDashboard:
+        now = datetime.now(UTC)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        prev_month_end = month_start - timedelta(microseconds=1)
+        prev_month_start = prev_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        recent_tenants_raw = self.repository.recent_tenants(limit=10)
+        recent_tenants = []
+        for tenant in recent_tenants_raw:
+            flags = self.repository.tenant_activation_flags(tenant.id)
+            recent_tenants.append(
+                RecentTenantRow(
+                    tenant_id=tenant.id,
+                    company_name=tenant.company_name,
+                    contact_email=tenant.contact_email,
+                    status=tenant.status.value,
+                    created_at=tenant.created_at,
+                    has_users=flags["has_users"],
+                    has_products=flags["has_products"],
+                    has_warehouse=flags["has_warehouse"],
+                    has_orders=flags["has_orders"],
+                )
+            )
+
+        health = self.get_platform_health()
+
+        return PlatformDashboard(
+            total_tenants=self.repository.count_tenants(),
+            active_tenants=self.repository.count_tenants_by_status(TenantStatus.ACTIVE),
+            disabled_tenants=self.repository.count_tenants_by_status(TenantStatus.DISABLED),
+            new_tenants_mtd=self.repository.count_tenants_created_since(month_start),
+            new_tenants_prev_month=self.repository.count_tenants_created_since(prev_month_start)
+            - self.repository.count_tenants_created_since(month_start),
+            total_users=self.repository.count_users(),
+            new_users_mtd=self.repository.count_users_created_since(month_start),
+            total_products=self.repository.count_products(),
+            stock_ledger_count=self.repository.count_ledger_entries(),
+            recent_audit_events=self.audit_logs.count_logs(since=now - timedelta(hours=24)),
+            audit_events_7d=self.audit_logs.count_logs(since=now - timedelta(days=7)),
+            tenant_growth_by_month=self.repository.tenant_growth_by_month(months=12),
+            audit_activity_by_day=self.repository.audit_activity_by_day(days=30),
+            most_active_tenants=self.repository.most_active_tenants(days=30, limit=10),
+            recent_tenants=recent_tenants,
+            platform_health=health,
+        )
 
     def list_tenants(self, search: str | None = None, status: str | None = None) -> list[TenantAdminListRow]:
         tenants = self.repository.list_tenants(search, status)

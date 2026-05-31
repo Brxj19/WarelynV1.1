@@ -15,6 +15,7 @@ class OTPSource(str, enum.Enum):
 class OTPPurpose(str, enum.Enum):
     EMAIL_VERIFICATION = "EMAIL_VERIFICATION"
     PHONE_VERIFICATION = "PHONE_VERIFICATION"
+    PASSWORD_RESET = "PASSWORD_RESET"
 
 
 class OTPVerification(Base):

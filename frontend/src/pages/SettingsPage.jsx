@@ -474,6 +474,7 @@ function ToggleSwitch({ label, description, checked, onChange }) {
 function UserPreferencesSection({ accessToken }) {
   const toast = useToast();
   const { user } = useAuth();
+  const canManageTemplateSettings = ['TENANT_ADMIN', 'INVENTORY_MANAGER'].includes(user?.role);
   const [prefs, setPrefs] = useState(null);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
@@ -486,7 +487,9 @@ function UserPreferencesSection({ accessToken }) {
     { group: 'Appearance', items: [{ id: 'display', icon: Palette, label: 'Display' }] },
     { group: 'Workspace', items: [{ id: 'startup', icon: Home, label: 'Startup Page' }, { id: 'tables', icon: LayoutList, label: 'Table View' }] },
     { group: 'Notifications', items: [{ id: 'alerts', icon: Bell, label: 'Alerts' }] },
-    { group: 'Templates', items: [{ id: 'invoice-templates', icon: FileText, label: 'Invoice' }, { id: 'bill-templates', icon: FileText, label: 'Bill' }, { id: 'verification-templates', icon: Mail, label: 'Verification' }] },
+    ...(canManageTemplateSettings
+      ? [{ group: 'Templates', items: [{ id: 'invoice-templates', icon: FileText, label: 'Invoice' }, { id: 'bill-templates', icon: FileText, label: 'Bill' }, { id: 'verification-templates', icon: Mail, label: 'Verification' }] }]
+      : []),
   ];
 
   const [invoicePdfTemplates, setInvoicePdfTemplates] = useState([]);
@@ -514,12 +517,14 @@ function UserPreferencesSection({ accessToken }) {
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-    documentService.listTemplates(accessToken, 'PDF', 'INVOICE_PDF').then(setInvoicePdfTemplates).catch(() => {});
-    documentService.listTemplates(accessToken, 'PDF', 'BILL_PDF').then(setBillPdfTemplates).catch(() => {});
-    documentService.listTemplates(accessToken, 'EMAIL', 'INVOICE_EMAIL').then(setInvoiceEmailTemplates).catch(() => {});
-    documentService.listTemplates(accessToken, 'EMAIL', 'BILL_EMAIL').then(setBillEmailTemplates).catch(() => {});
-    documentService.listTemplates(accessToken, 'EMAIL', 'EMAIL_VERIFICATION').then(setVerificationTemplates).catch(() => {});
-  }, [accessToken]);
+    if (canManageTemplateSettings) {
+      documentService.listTemplates(accessToken, 'PDF', 'INVOICE_PDF').then(setInvoicePdfTemplates).catch(() => {});
+      documentService.listTemplates(accessToken, 'PDF', 'BILL_PDF').then(setBillPdfTemplates).catch(() => {});
+      documentService.listTemplates(accessToken, 'EMAIL', 'INVOICE_EMAIL').then(setInvoiceEmailTemplates).catch(() => {});
+      documentService.listTemplates(accessToken, 'EMAIL', 'BILL_EMAIL').then(setBillEmailTemplates).catch(() => {});
+      documentService.listTemplates(accessToken, 'EMAIL', 'EMAIL_VERIFICATION').then(setVerificationTemplates).catch(() => {});
+    }
+  }, [accessToken, canManageTemplateSettings]);
 
   async function handleSave() {
     setSaving(true);

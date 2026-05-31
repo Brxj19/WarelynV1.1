@@ -22,6 +22,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const successMessage = location.state?.successMessage;
   const [values, setValues] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,11 +61,21 @@ export function LoginPage() {
           <p className="mt-2 text-sm leading-6 text-warelyn-muted">Inventory that moves with your business, with a cleaner shell for operators and admins.</p>
         </div>
 
+        {successMessage ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+            {successMessage}
+          </div>
+        ) : null}
         {error ? <ErrorState description={error} title="Sign in failed" /> : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <Input autoComplete="email" id="email" label="Email" onChange={updateField('email')} placeholder="you@example.com" type="email" value={values.email} />
           <Input autoComplete="current-password" id="password" label="Password" onChange={updateField('password')} placeholder="Password" type="password" value={values.password} />
+          <div className="text-right">
+            <Link className="text-xs text-warelyn-primary hover:underline" to="/forgot-password">
+              Forgot password?
+            </Link>
+          </div>
           <Button className="w-full" isLoading={isSubmitting} type="submit">
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </Button>

@@ -170,6 +170,87 @@ def test_auto_pack_and_fulfill_creates_package_and_deducts_stock(client: TestCli
     assert stock.quantity_available == Decimal("7.000")
 
 
+def test_pick_allows_resubmitting_stale_picked_lines_after_partial_fulfillment(client: TestClient) -> None:
+    login = register_and_login(client, "pick-partial@example.com")
+    dimension = setup_sales_dimension(client, login["access_token"], "PICK-PARTIAL")
+    stock_in(client, login["access_token"], dimension, "10", "stock-in-pick-partial")
+    order = create_sales_order(client, login["access_token"], dimension, "5", "SO-PICK-PARTIAL")
+    confirm = client.post(
+        f"/api/sales-orders/{order['id']}/confirm",
+        json={
+            "idempotency_key": "confirm-pick-partial",
+            "allocations": [
+                {
+                    "sales_order_item_id": order["items"][0]["id"],
+                    "warehouse_id": dimension["warehouse_id"],
+                    "location_id": dimension["location_id"],
+                    "quantity": "2",
+                },
+                {
+                    "sales_order_item_id": order["items"][0]["id"],
+                    "warehouse_id": dimension["warehouse_id"],
+                    "location_id": dimension["location_id"],
+                    "quantity": "3",
+                },
+            ],
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert confirm.status_code == 200
+    first_reservation = confirm.json()["stock_results"][0]["reservation"]["id"]
+    second_reservation = confirm.json()["stock_results"][1]["reservation"]["id"]
+
+    pick_task = get_auto_pick_task(client, login["access_token"], order["id"])
+    item_by_reservation = {item["reservation_id"]: item for item in pick_task["items"]}
+    first_item = item_by_reservation[first_reservation]
+    second_item = item_by_reservation[second_reservation]
+
+    partial_pick = client.post(
+        f"/api/pick-tasks/{pick_task['id']}/pick",
+        json={
+            "items": [
+                {"pick_task_item_id": first_item["id"], "picked_quantity": first_item["required_quantity"]},
+                {"pick_task_item_id": second_item["id"], "picked_quantity": "0"},
+            ]
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert partial_pick.status_code == 200
+    assert partial_pick.json()["status"] == "IN_PROGRESS"
+
+    partial_fulfillment = create_fulfillment(
+        client,
+        login["access_token"],
+        order,
+        dimension,
+        first_reservation,
+        "2",
+        "FUL-PICK-PARTIAL-1",
+    )
+    commit_partial = client.post(
+        f"/api/sales-fulfillments/{partial_fulfillment['id']}/commit",
+        json={"idempotency_key": "fulfill-pick-partial-1"},
+        headers=auth_headers(login["access_token"]),
+    )
+    assert commit_partial.status_code == 200
+    assert commit_partial.json()["sales_order"]["status"] == "PARTIALLY_FULFILLED"
+
+    # Frontend submits all lines again. Previously picked lines may now point to
+    # DEDUCTED reservations and should be treated as safe no-op lines.
+    resume_pick = client.post(
+        f"/api/pick-tasks/{pick_task['id']}/pick",
+        json={
+            "items": [
+                {"pick_task_item_id": first_item["id"], "picked_quantity": first_item["required_quantity"]},
+                {"pick_task_item_id": second_item["id"], "picked_quantity": second_item["required_quantity"]},
+            ]
+        },
+        headers=auth_headers(login["access_token"]),
+    )
+    assert resume_pick.status_code == 200
+    assert resume_pick.json()["status"] == "PICKED"
+
+
 def test_cannot_pack_unpicked_items_and_auto_fulfill_deducts_stock_correctly(client: TestClient, db_session: Session) -> None:
     login = register_and_login(client)
     dimension = setup_sales_dimension(client, login["access_token"])

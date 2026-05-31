@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart3, Boxes, ClipboardList, Download, PackageCheck, Search, ShieldCheck, Warehouse } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Boxes, Download, PackageCheck, Search, ShieldCheck, Warehouse } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -10,7 +10,7 @@ import { ScreenToolbar } from '../components/ui/ScreenToolbar.jsx';
 import { SortableHeader } from '../components/ui/SortableHeader.jsx';
 import { TableShell } from '../components/ui/TableShell.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
-import { formatDate, formatDateTime, formatDecimal, formatMoney, titleCaseStatus } from '../utils/formatters.js';
+import { formatDate, formatDateTime, formatDecimal, formatMoney, formatNumber, titleCaseStatus } from '../utils/formatters.js';
 import { getNextSort, inferSortType, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
@@ -22,7 +22,6 @@ export const reportLinks = [
   ['Location stock', '/reports/location-stock', 'Stock projection by bin/location and SKU.', Warehouse],
   ['Stock movements', '/reports/stock-movements', 'Ledger-backed stock movement history.', Activity],
   ['Low stock', '/reports/low-stock', 'Products at or below reorder level.', AlertTriangle],
-  ['Reorder suggestions', '/reports/reorder-suggestions', 'Advisory replenishment quantities based on reorder level.', ClipboardList],
   ['Product valuation', '/reports/product-valuation', 'Current-cost stock valuation from backend data.', BarChart3],
   ['Batch expiry', '/reports/batch-expiry', 'Expired and expiring batch visibility.', PackageCheck],
   ['Serial status', '/reports/serial-status', 'Serial-level stock state.', PackageCheck],
@@ -32,7 +31,7 @@ export const reportLinks = [
 
 const reportGroups = [
   ['Inventory', ['Inventory summary', 'Warehouse stock', 'Location stock', 'Product valuation']],
-  ['Stock Health', ['Low stock', 'Reorder suggestions']],
+  ['Stock Health', ['Low stock']],
   ['Traceability', ['Batch expiry', 'Serial status']],
   ['Operations', ['Stock movements', 'Blocked stock']],
   ['Reconciliation', ['Reconciliation']],
@@ -80,6 +79,8 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
     key: columns[0]?.key ?? '',
     direction: 'asc',
   }));
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -132,6 +133,15 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
       ),
     [columns, rows, sortState],
   );
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, query, sortState, pageSize, normalizedRows.length]);
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [pageSize, safePage, sortedRows]);
   const activeFilters = [
     search ? { key: 'search', label: `Search: ${search}`, onRemove: () => setSearch('') } : null,
     ...filters
@@ -278,11 +288,11 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map((row, index) => (
+            {pagedRows.map((row, index) => (
               <tr key={row.id ?? index}>
                 {columns.map((column) => (
                   <td className={(column.numeric ?? inferSortType(column.key) === 'number') ? 'number-cell whitespace-nowrap' : 'whitespace-nowrap'} key={column.key}>
-                    {renderReportCell(row[column.key], column.key, currency)}
+                    {column.render ? column.render(row[column.key], row, currency) : renderReportCell(row[column.key], column.key, currency)}
                   </td>
                 ))}
               </tr>
@@ -290,6 +300,43 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
           </tbody>
         </table>
       </TableShell>
+      {sortedRows.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warelyn-border bg-white px-4 py-3">
+          <p className="text-xs text-warelyn-muted">
+            Showing {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, sortedRows.length)} of {sortedRows.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-warelyn-muted" htmlFor="report-page-size">Rows</label>
+            <select
+              id="report-page-size"
+              className="rounded-lg border border-warelyn-border bg-white px-2 py-1.5 text-xs text-warelyn-text"
+              onChange={(event) => setPageSize(Number(event.target.value))}
+              value={pageSize}
+            >
+              {[10, 25, 50, 100].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+            <button
+              className="rounded-lg border border-warelyn-border px-3 py-1.5 text-xs font-semibold text-warelyn-text disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              type="button"
+            >
+              Prev
+            </button>
+            <span className="text-xs font-medium text-warelyn-muted">Page {safePage} / {totalPages}</span>
+            <button
+              className="rounded-lg border border-warelyn-border px-3 py-1.5 text-xs font-semibold text-warelyn-text disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              type="button"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -300,7 +347,9 @@ function renderReportCell(value, key, currency) {
   if (key.endsWith('_date') || key === 'expiry_date' || key === 'order_date') return formatDate(value);
   if (key.includes('status') || key === 'movement_type' || key === 'reference_type') return <StatusBadge status={value}>{titleCaseStatus(value)}</StatusBadge>;
   if (['sku', 'barcode', 'ledger_id', 'reference_id', 'batch_number', 'serial_number'].includes(key)) return <span className="mono-cell">{value}</span>;
-  if (key.includes('value') || key.includes('cost') || key.includes('price')) return formatMoney(value, currency);
+  if (key.includes('value') || key.includes('cost') || key.includes('price') || key.includes('amount') || key.includes('total')) return formatMoney(value, currency);
+  if (key.includes('units') || key.includes('count')) return formatNumber(value, { maximumFractionDigits: 0 });
+  if (key === 'on_hand') return formatNumber(value, { maximumFractionDigits: 0 });
   if (key.includes('quantity') || key.includes('on_hand') || key.includes('reserved') || key.includes('available') || key.includes('delta')) return formatDecimal(value);
   return value;
 }

@@ -54,8 +54,9 @@ class TestUserEmailTriggers:
         call_kwargs = mock_send_email.call_args.kwargs
         assert call_kwargs["to_email"] == "newuser@testcorp.com"
 
+    @patch("app.services.auth.send_password_reset_link_email")
     @patch("app.services.users.send_email")
-    def test_password_reset_triggers_email(self, mock_send_email: MagicMock, db_session: Session):
+    def test_password_reset_triggers_email(self, mock_send_email: MagicMock, mock_send_reset_link_email: MagicMock, db_session: Session):
         tenant_id, actor_id = _setup_tenant_and_actor(db_session)
         service = UsersService(db_session)
 
@@ -67,12 +68,17 @@ class TestUserEmailTriggers:
         )
         user = service.create_user(tenant_id, actor_id, data)
         mock_send_email.reset_mock()
+        mock_send_reset_link_email.reset_mock()
 
-        service.reset_password(tenant_id, actor_id, user.id, "newpassword123")
+        service.reset_password(tenant_id, actor_id, user.id)
 
-        mock_send_email.assert_called_once()
-        call_kwargs = mock_send_email.call_args.kwargs
-        assert call_kwargs["to_email"] == "resetuser@testcorp.com"
+        mock_send_email.assert_not_called()
+        mock_send_reset_link_email.assert_called_once()
+        call_args, call_kwargs = mock_send_reset_link_email.call_args
+        if call_kwargs:
+            assert call_kwargs["to_email"] == "resetuser@testcorp.com"
+        else:
+            assert call_args[0] == "resetuser@testcorp.com"
 
     @patch("app.services.users.send_email")
     def test_disable_user_triggers_email(self, mock_send_email: MagicMock, db_session: Session):

@@ -11,19 +11,20 @@ from app.services.operations import PutawayTaskService
 
 router = APIRouter(prefix="/putaway-tasks", tags=["putaway-tasks"])
 roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER)
+read_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER, UserRole.PURCHASE_STAFF)
 
 
 @router.get("", response_model=list[PutawayTaskRead])
 def list_putaway_tasks(
     status: PutawayTaskStatus | None = Query(default=None),
-    context: UserContext = Depends(require_roles(*roles)),
+    context: UserContext = Depends(require_roles(*read_roles)),
     db: Session = Depends(get_db),
 ):
     return PutawayTaskService(db).list(context.tenant_id, status)
 
 
 @router.get("/{task_id}", response_model=PutawayTaskRead)
-def get_putaway_task(task_id: int, context: UserContext = Depends(require_roles(*roles)), db: Session = Depends(get_db)):
+def get_putaway_task(task_id: int, context: UserContext = Depends(require_roles(*read_roles)), db: Session = Depends(get_db)):
     return PutawayTaskService(db).get(context.tenant_id, task_id)
 
 

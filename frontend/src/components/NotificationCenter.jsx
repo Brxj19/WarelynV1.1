@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import * as notificationService from '../services/notificationService.js';
-import { formatDate } from '../utils/formatters.js';
+import { formatDateTime } from '../utils/formatters.js';
 
 const TABS = [
   { key: 'all', label: 'All' },
@@ -54,46 +54,58 @@ export function NotificationBell() {
   }, []);
 
   async function handleMarkRead(id) {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    setUnreadCount((prev) => Math.max(0, prev - 1));
     try {
       await notificationService.markNotificationRead(accessToken, id);
-      fetchData();
     } catch {
       toast.error('Failed to mark as read.');
+      fetchData();
     }
   }
 
   async function handleMarkAllRead() {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setUnreadCount(0);
     try {
       await notificationService.markAllNotificationsRead(accessToken);
-      fetchData();
       toast.success('All notifications marked as read.');
     } catch {
       toast.error('Failed to mark all as read.');
+      fetchData();
     }
   }
 
   async function handleClearOne(id) {
+    const wasUnread = notifications.find((n) => n.id === id && !n.is_read);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (wasUnread) setUnreadCount((prev) => Math.max(0, prev - 1));
     try {
       await notificationService.clearOne(accessToken, id);
-      fetchData();
     } catch {
       toast.error('Failed to clear notification.');
+      fetchData();
     }
   }
 
   async function handleClearAll() {
+    const hadUnread = notifications.some((n) => !n.is_read);
+    setNotifications([]);
+    if (hadUnread) setUnreadCount(0);
     try {
       await notificationService.clearAll(accessToken);
-      fetchData();
       toast.success('All notifications cleared.');
     } catch {
       toast.error('Failed to clear notifications.');
+      fetchData();
     }
   }
 
   function handleNotificationClick(n) {
     if (n.action_url) {
       if (!n.is_read) {
+        setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
         notificationService.markNotificationRead(accessToken, n.id).catch(() => {});
       }
       setOpen(false);
@@ -165,7 +177,7 @@ export function NotificationBell() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-warelyn-text">{n.title}</p>
                     {n.message ? <p className="mt-0.5 text-xs text-warelyn-muted line-clamp-2">{n.message}</p> : null}
-                    <p className="mt-1 text-[10px] text-warelyn-muted">{formatDate(n.created_at)}</p>
+                    <p className="mt-1 text-[10px] text-warelyn-muted">{formatDateTime(n.created_at)}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     {!n.is_read && !n.cleared_at ? (

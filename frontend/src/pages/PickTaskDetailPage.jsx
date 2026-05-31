@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { Link, useParams } from 'react-router-dom';
 import { Boxes, ScanLine } from 'lucide-react';
 
@@ -134,7 +133,6 @@ export function PickTaskDetailPage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/pick-tasks" />
       {error ? <ErrorState description={error} /> : null}
       <RecordDetailShell
         actions={

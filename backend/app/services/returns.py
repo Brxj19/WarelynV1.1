@@ -12,6 +12,7 @@ from app.models.sales import SalesOrderStatus
 from app.repositories.returns import ReturnsRepository
 from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.services.workflow import WorkflowService
 
 ZERO = Decimal("0")
@@ -93,6 +94,21 @@ class ReturnsService:
             self.db.commit()
         except Exception:
             pass
+        try:
+            NotificationService(self.db).notify_role(
+                tenant_id,
+                "INVENTORY_MANAGER",
+                title=f"Return {sales_return.return_number} submitted - QC required",
+                message="A customer return needs QC inspection.",
+                type="WARNING",
+                category="RETURNS",
+                priority="high",
+                entity_type="sales_return",
+                entity_id=return_id,
+                action_url=f"/returns/{return_id}",
+            )
+        except Exception:
+            pass
         return self.get_return(tenant_id, return_id)
 
     def cancel_return(self, tenant_id: int, return_id: int) -> SalesReturn:
@@ -162,6 +178,20 @@ class ReturnsService:
         try:
             WorkflowService(self.db).complete_entity_step(
                 tenant_id, "sales_return", return_id, "RETURN_QC", actor_id
+            )
+        except Exception:
+            pass
+        try:
+            NotificationService(self.db).notify_roles(
+                tenant_id,
+                ["SALES_STAFF", "TENANT_ADMIN"],
+                title=f"Return {sales_return.return_number} processed",
+                message="QC inspection complete.",
+                type="SUCCESS",
+                category="RETURNS",
+                entity_type="sales_return",
+                entity_id=return_id,
+                action_url=f"/returns/{return_id}",
             )
         except Exception:
             pass

@@ -31,6 +31,13 @@ from app.services.reports import ReportsService
 
 router = APIRouter(tags=["reports"])
 read_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER, UserRole.VIEWER)
+dashboard_roles = (
+    UserRole.TENANT_ADMIN,
+    UserRole.INVENTORY_MANAGER,
+    UserRole.SALES_STAFF,
+    UserRole.PURCHASE_STAFF,
+    UserRole.VIEWER,
+)
 
 
 def common_filters(
@@ -127,7 +134,7 @@ def reconciliation(context: UserContext = Depends(require_roles(*read_roles)), d
 @router.get("/dashboard/operations", response_model=OperationalDashboard)
 def operational_dashboard(
     compare_previous: bool = False,
-    context: UserContext = Depends(require_roles(*read_roles)),
+    context: UserContext = Depends(require_roles(*dashboard_roles)),
     db: Session = Depends(get_db),
 ) -> OperationalDashboard:
     return ReportsService(db).operational_dashboard(context.tenant_id, compare_previous=compare_previous)

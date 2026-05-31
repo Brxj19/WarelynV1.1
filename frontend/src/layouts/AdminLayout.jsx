@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 
 import { AppLogo } from '../components/AppLogo.jsx';
 import { Button } from '../components/ui/Button.jsx';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 const ADMIN_NAV = [
@@ -19,6 +20,8 @@ export function AdminLayout() {
   const { logout, user } = useAuth();
   const accountRef = useRef(null);
   const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [isSignOutConfirmOpen, setIsSignOutConfirmOpen] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -27,6 +30,16 @@ export function AdminLayout() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, []);
+
+  async function confirmSignOut() {
+    setIsSigningOut(true);
+    try {
+      await logout();
+    } finally {
+      setIsSigningOut(false);
+      setIsSignOutConfirmOpen(false);
+    }
+  }
 
   const currentLabel = ADMIN_NAV.find((item) => location.pathname === item.to)?.label ?? 'Admin';
 
@@ -65,7 +78,7 @@ export function AdminLayout() {
           </div>
           <button
             className="mt-2 flex w-full items-center gap-2 rounded px-2 py-1 text-xs text-white/60 hover:bg-white/5 hover:text-white transition"
-            onClick={logout}
+            onClick={() => setIsSignOutConfirmOpen(true)}
             type="button"
           >
             <LogOut size={14} />
@@ -104,7 +117,10 @@ export function AdminLayout() {
                   </button>
                   <button
                     className="popover-row"
-                    onClick={async () => { setIsAccountOpen(false); await logout(); }}
+                    onClick={() => {
+                      setIsAccountOpen(false);
+                      setIsSignOutConfirmOpen(true);
+                    }}
                     type="button"
                   >
                     <LogOut size={16} />
@@ -127,6 +143,16 @@ export function AdminLayout() {
           </div>
         </main>
       </div>
+      <ConfirmationModal
+        open={isSignOutConfirmOpen}
+        title="Sign out?"
+        description="Are you sure you want to end this session?"
+        confirmLabel="Sign out"
+        variant="danger"
+        isLoading={isSigningOut}
+        onCancel={() => setIsSignOutConfirmOpen(false)}
+        onConfirm={confirmSignOut}
+      />
     </div>
   );
 }

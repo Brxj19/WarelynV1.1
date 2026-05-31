@@ -8,7 +8,7 @@ import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { StatusBadge } from '../components/ui/Badge.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
-import { formatDate } from '../utils/formatters.js';
+import { formatDateTime } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as workflowService from '../services/workflowService.js';
 
@@ -138,10 +138,10 @@ export function MyTasksPage() {
                   <span>{task.entity_type.replace(/_/g, ' ')} #{task.entity_id}</span>
                   <StatusBadge status={task.status}>{task.status.replace(/_/g, ' ')}</StatusBadge>
                   <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{task.assigned_role.replace(/_/g, ' ')}</span>
-                  <span className="inline-flex items-center gap-1"><Clock size={12} />{formatDate(task.created_at)}</span>
+                  <span className="inline-flex items-center gap-1"><Clock size={12} />{formatDateTime(task.created_at)}</span>
                   {task.due_at && (
                     <span className={`inline-flex items-center gap-1 ${isOverdue(task.due_at) ? 'font-semibold text-red-600' : ''}`}>
-                      Due {formatDate(task.due_at)}
+                      Due {formatDateTime(task.due_at)}
                     </span>
                   )}
                 </div>

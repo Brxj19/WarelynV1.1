@@ -33,6 +33,6 @@ export function disableUser(accessToken, userId) {
   return apiRequest(`/users/${userId}/disable`, { accessToken, method: 'POST' });
 }
 
-export function resetPassword(accessToken, userId, newPassword) {
-  return apiRequest(`/users/${userId}/reset-password`, { accessToken, method: 'POST', body: JSON.stringify({ new_password: newPassword }) });
+export function resetPassword(accessToken, userId) {
+  return apiRequest(`/users/${userId}/reset-password`, { accessToken, method: 'POST', body: JSON.stringify({}) });
 }

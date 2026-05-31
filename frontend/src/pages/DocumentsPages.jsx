@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
+import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
@@ -12,7 +13,7 @@ import { ScreenToolbar } from '../components/ui/ScreenToolbar.jsx';
 import { StatusBadge } from '../components/ui/Badge.jsx';
 import { TableShell } from '../components/ui/TableShell.jsx';
 import { emptyStateIllustrations } from '../lib/emptyStates.js';
-import { formatDate, formatMoney } from '../utils/formatters.js';
+import { formatDate, formatDecimal, formatMoney } from '../utils/formatters.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as documentService from '../services/documentService.js';
@@ -99,6 +100,7 @@ export function InvoiceDetailPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
   const mayWrite = user?.role !== 'VIEWER';
 
   async function load() {
@@ -144,13 +146,31 @@ export function InvoiceDetailPage() {
               PDF
             </Button>
             {mayWrite && invoice.status !== 'PAID' && (
-              <Button disabled={isBusy} variant="secondary" onClick={() => run(() => documentService.sendInvoice(accessToken, id))}>
+              <Button
+                disabled={isBusy}
+                variant="secondary"
+                onClick={() => setPendingAction({
+                  label: 'Send invoice',
+                  description: 'Send this invoice email to the customer.',
+                  variant: 'secondary',
+                  run: () => documentService.sendInvoice(accessToken, id),
+                })}
+              >
                 <Mail size={16} />
                 Send
               </Button>
             )}
             {mayWrite && invoice.status !== 'PAID' && (
-              <Button disabled={isBusy} variant="accent" onClick={() => run(() => documentService.markInvoicePaid(accessToken, id))}>
+              <Button
+                disabled={isBusy}
+                variant="accent"
+                onClick={() => setPendingAction({
+                  label: 'Mark paid',
+                  description: 'Mark this invoice as paid. This updates payment status immediately.',
+                  variant: 'accent',
+                  run: () => documentService.markInvoicePaid(accessToken, id),
+                })}
+              >
                 <Stamp size={16} />
                 Mark paid
               </Button>
@@ -187,7 +207,7 @@ export function InvoiceDetailPage() {
               {invoice.items.map((item) => (
                 <tr key={item.id}>
                   <td>{item.description}</td>
-                  <td className="number-cell">{item.quantity}</td>
+                  <td className="number-cell">{formatDecimal(item.quantity)}</td>
                   <td className="number-cell">{formatMoney(item.unit_price, invoice.currency || 'USD')}</td>
                   <td className="number-cell">{formatMoney(item.line_total, invoice.currency || 'USD')}</td>
                 </tr>
@@ -196,6 +216,20 @@ export function InvoiceDetailPage() {
           </table>
         </TableShell>
       </RecordDetailShell>
+      <ConfirmationModal
+        open={Boolean(pendingAction)}
+        title="Confirm invoice action"
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.label}
+        variant={pendingAction?.variant ?? 'primary'}
+        isLoading={isBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          const action = pendingAction?.run;
+          setPendingAction(null);
+          if (action) await run(action);
+        }}
+      />
     </div>
   );
 }
@@ -274,6 +308,7 @@ export function BillDetailPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
 
   async function load() {
     setIsLoading(true);
@@ -318,13 +353,31 @@ export function BillDetailPage() {
               PDF
             </Button>
             {mayWrite && bill.status !== 'PAID' && (
-              <Button disabled={isBusy} variant="secondary" onClick={() => run(() => documentService.sendBill(accessToken, id))}>
+              <Button
+                disabled={isBusy}
+                variant="secondary"
+                onClick={() => setPendingAction({
+                  label: 'Send bill',
+                  description: 'Send this bill email to the vendor contact.',
+                  variant: 'secondary',
+                  run: () => documentService.sendBill(accessToken, id),
+                })}
+              >
                 <Mail size={16} />
                 Send
               </Button>
             )}
             {mayWrite && bill.status !== 'PAID' && (
-              <Button disabled={isBusy} variant="accent" onClick={() => run(() => documentService.markBillPaid(accessToken, id))}>
+              <Button
+                disabled={isBusy}
+                variant="accent"
+                onClick={() => setPendingAction({
+                  label: 'Mark paid',
+                  description: 'Mark this bill as paid. This updates payable status immediately.',
+                  variant: 'accent',
+                  run: () => documentService.markBillPaid(accessToken, id),
+                })}
+              >
                 <Receipt size={16} />
                 Mark paid
               </Button>
@@ -361,7 +414,7 @@ export function BillDetailPage() {
               {bill.items.map((item) => (
                 <tr key={item.id}>
                   <td>{item.description}</td>
-                  <td className="number-cell">{item.quantity}</td>
+                  <td className="number-cell">{formatDecimal(item.quantity)}</td>
                   <td className="number-cell">{formatMoney(item.unit_cost, bill.currency || 'USD')}</td>
                   <td className="number-cell">{formatMoney(item.line_total, bill.currency || 'USD')}</td>
                 </tr>
@@ -370,6 +423,20 @@ export function BillDetailPage() {
           </table>
         </TableShell>
       </RecordDetailShell>
+      <ConfirmationModal
+        open={Boolean(pendingAction)}
+        title="Confirm bill action"
+        description={pendingAction?.description}
+        confirmLabel={pendingAction?.label}
+        variant={pendingAction?.variant ?? 'primary'}
+        isLoading={isBusy}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          const action = pendingAction?.run;
+          setPendingAction(null);
+          if (action) await run(action);
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { KeyRound, Search, Shield, UserMinus, UserPlus, Users } from 'lucide-react';
+import { KeyRound, Search, Shield, Trash2, UserMinus, UserPlus, Users } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { Badge } from '../components/ui/Badge.jsx';
@@ -83,7 +83,7 @@ function SelectField({ label, id, value, onChange, options, error, disabled = fa
 }
 
 export function UsersPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user: currentUser } = useAuth();
   const toast = useToast();
 
   const [users, setUsers] = useState([]);
@@ -99,6 +99,7 @@ export function UsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState(null);
   const [disableTarget, setDisableTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
 
   // Form states
@@ -107,8 +108,6 @@ export function UsersPage() {
   const [createErrors, setCreateErrors] = useState({});
   const [editForm, setEditForm] = useState({ name: '', phone: '', role: '' });
   const [editErrors, setEditErrors] = useState({});
-  const [resetForm, setResetForm] = useState({ password: '', confirm: '' });
-  const [resetErrors, setResetErrors] = useState({});
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -229,28 +228,30 @@ export function UsersPage() {
     }
   }
 
-  // Reset password
-  function validateReset() {
-    const errs = {};
-    if (!resetForm.password) errs.password = 'Password is required.';
-    else if (resetForm.password.length < 8) errs.password = 'Password must be at least 8 characters.';
-    if (resetForm.password !== resetForm.confirm) errs.confirm = 'Passwords do not match.';
-    return errs;
+  async function handleDeleteUser() {
+    if (!deleteTarget) return;
+    setFormLoading(true);
+    try {
+      await userService.deleteUser(accessToken, deleteTarget.id);
+      toast.success(`${deleteTarget.name} has been deleted.`);
+      setDeleteTarget(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete user.');
+    } finally {
+      setFormLoading(false);
+    }
   }
 
   async function handleReset() {
-    const errs = validateReset();
-    setResetErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (!resetTarget) return;
     setFormLoading(true);
     try {
-      await userService.resetPassword(accessToken, resetTarget.id, resetForm.password);
-      toast.success(`Password reset for ${resetTarget.name}.`);
+      await userService.resetPassword(accessToken, resetTarget.id);
+      toast.success(`Reset password link sent to ${resetTarget.name}.`);
       setResetTarget(null);
-      setResetForm({ password: '', confirm: '' });
-      setResetErrors({});
     } catch (err) {
-      toast.error(err.message || 'Failed to reset password.');
+      toast.error(err.message || 'Failed to send reset link.');
     } finally {
       setFormLoading(false);
     }
@@ -377,12 +378,22 @@ export function UsersPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setResetTarget(user); setResetForm({ password: '', confirm: '' }); setResetErrors({}); }}
+                        onClick={() => setResetTarget(user)}
                         className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition"
-                        title="Reset password"
+                        title="Send password reset link"
                       >
                         <KeyRound size={14} />
                       </button>
+                      {currentUser?.id !== user.id ? (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(user)}
+                          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-warelyn-danger hover:bg-red-50 transition"
+                          title="Delete user"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -500,36 +511,29 @@ export function UsersPage() {
         onCancel={() => setDisableTarget(null)}
       />
 
-      {/* Reset Password Modal */}
-      <FormModal
-        open={!!resetTarget}
-        onClose={() => { setResetTarget(null); setResetErrors({}); }}
-        title={`Reset Password for ${resetTarget?.name ?? ''}`}
-        onSubmit={handleReset}
+      {/* Delete User Confirmation Modal */}
+      <ConfirmationModal
+        open={!!deleteTarget}
+        title={`Delete ${deleteTarget?.name}?`}
+        description="This will permanently remove the user account. If this user has created business records, deletion will be blocked and you should disable the account instead."
+        confirmLabel="Delete User"
+        variant="danger"
         isLoading={formLoading}
-        submitLabel="Reset Password"
-      >
-        <Input
-          label="New Password"
-          id="reset-password"
-          type="password"
-          value={resetForm.password}
-          onChange={(e) => setResetForm((f) => ({ ...f, password: e.target.value }))}
-          error={resetErrors.password}
-          placeholder="Minimum 8 characters"
-          required
-        />
-        <Input
-          label="Confirm Password"
-          id="reset-confirm"
-          type="password"
-          value={resetForm.confirm}
-          onChange={(e) => setResetForm((f) => ({ ...f, confirm: e.target.value }))}
-          error={resetErrors.confirm}
-          placeholder="Re-enter password"
-          required
-        />
-      </FormModal>
+        onConfirm={handleDeleteUser}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Reset Password Link Modal */}
+      <ConfirmationModal
+        open={!!resetTarget}
+        title={`Send reset link to ${resetTarget?.name ?? ''}?`}
+        description={`An email with a secure reset password link will be sent to ${resetTarget?.email ?? 'this user'}.`}
+        confirmLabel="Send reset link"
+        variant="accent"
+        isLoading={formLoading}
+        onConfirm={handleReset}
+        onCancel={() => setResetTarget(null)}
+      />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { BackButton } from '../components/ui/BackButton.jsx';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { BarcodeInput } from '../components/forms/BarcodeInput.jsx';
@@ -127,7 +126,6 @@ export function PurchaseReceivePage() {
 
   return (
     <div className="space-y-6">
-      <BackButton to="/purchase-receipts" />
       <PageHeader backTo="/purchases" description="Choose warehouse and location for each received line. The backend validates remaining quantities before stock changes." kicker="Receiving" title={`Receive ${order.po_number}`} />
       {error ? <ErrorState description={error} /> : null}
       <form className="space-y-6" onSubmit={handleSubmit}>

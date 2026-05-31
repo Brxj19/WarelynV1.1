@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,6 +12,7 @@ from app.repositories.fulfillment import FulfillmentRepository
 from app.repositories.sales import SalesRepository
 from app.schemas.workflow import WorkflowTaskCreate
 from app.services.inventory import InventoryService
+from app.services.notification import NotificationService
 from app.services.workflow import WorkflowService
 
 FULFILLABLE_STATUSES = {SalesOrderStatus.CONFIRMED, SalesOrderStatus.PARTIALLY_FULFILLED}
@@ -38,6 +39,11 @@ class SalesService:
 
     def create_sales_order(self, tenant_id: int, actor_id: int, values: dict[str, Any]) -> SalesOrder:
         self._require_customer(tenant_id, values["customer_id"])
+        self._validate_expected_ship_date(
+            values.get("order_date"),
+            values.get("expected_ship_date"),
+            min_reference_date=datetime.now(UTC).date(),
+        )
         items = values.pop("items", [])
         order = self.repository.create_sales_order({**values, "tenant_id": tenant_id, "created_by": actor_id, "status": SalesOrderStatus.DRAFT})
         self._replace_order_items(tenant_id, order.id, items)
@@ -49,6 +55,11 @@ class SalesService:
             raise AppError("INVALID_SALES_ORDER_STATE", "Only draft sales orders can be edited.", 409)
         if values.get("customer_id"):
             self._require_customer(tenant_id, values["customer_id"])
+        self._validate_expected_ship_date(
+            values.get("order_date", order.order_date),
+            values.get("expected_ship_date", order.expected_ship_date),
+            min_reference_date=order.created_at.date(),
+        )
         items = values.pop("items", None)
         for key, value in values.items():
             setattr(order, key, value)
@@ -122,6 +133,20 @@ class SalesService:
         except Exception:
             pass
         try:
+            NotificationService(self.db).notify_role(
+                tenant_id,
+                "INVENTORY_MANAGER",
+                title=f"New order to pick: {order.order_number}",
+                message=f"Sales order {order.order_number} confirmed. Please pick the required stock.",
+                type="INFO",
+                category="SALES",
+                entity_type="sales_order",
+                entity_id=order.id,
+                action_url=f"/sales/{order.id}",
+            )
+        except Exception:
+            pass
+        try:
             self._auto_create_pick_task(tenant_id, actor_id, order)
         except Exception:
             pass
@@ -148,6 +173,19 @@ class SalesService:
         try:
             WorkflowService(self.db).cancel_entity_tasks(tenant_id, "sales_order", order.id)
             self.db.commit()
+        except Exception:
+            pass
+        try:
+            NotificationService(self.db).notify_roles(
+                tenant_id,
+                ["TENANT_ADMIN", "SALES_STAFF"],
+                title=f"Order {order.order_number} cancelled",
+                type="WARNING",
+                category="SALES",
+                entity_type="sales_order",
+                entity_id=order.id,
+                action_url=f"/sales/{order.id}",
+            )
         except Exception:
             pass
         return result
@@ -269,6 +307,21 @@ class SalesService:
         except Exception:
             pass
         try:
+            NotificationService(self.db).notify_role(
+                tenant_id,
+                "SALES_STAFF",
+                title=f"Order {order.order_number} fulfilled - create invoice",
+                message="Fulfillment committed. Please create and send the invoice.",
+                type="INFO",
+                category="SALES",
+                priority="high",
+                entity_type="sales_order",
+                entity_id=order.id,
+                action_url=f"/invoices/new?sales_order_id={order.id}",
+            )
+        except Exception:
+            pass
+        try:
             self._auto_create_invoice(tenant_id, actor_id, order)
         except Exception:
             pass
@@ -382,6 +435,19 @@ class SalesService:
     def _require_customer(self, tenant_id: int, customer_id: int) -> None:
         if self.repository.get_customer(tenant_id, customer_id) is None:
             raise AppError("CUSTOMER_NOT_FOUND", "Customer was not found for this tenant.", 404)
+
+    def _validate_expected_ship_date(
+        self,
+        order_date: date | None,
+        expected_ship_date: date | None,
+        min_reference_date: date | None = None,
+    ) -> None:
+        if expected_ship_date is None or order_date is None:
+            return
+        if expected_ship_date < order_date:
+            raise AppError("INVALID_EXPECTED_SHIP_DATE", "Expected ship date cannot be earlier than order date.", 400)
+        if min_reference_date is not None and expected_ship_date < min_reference_date:
+            raise AppError("INVALID_EXPECTED_SHIP_DATE", "Expected ship date cannot be earlier than created date.", 400)
 
     def _require_product(self, tenant_id: int, product_id: int):
         product = self.repository.get_product(tenant_id, product_id)

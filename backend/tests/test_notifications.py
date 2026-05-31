@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.security import get_password_hash
 from app.models.auth import Tenant, User, UserRole, UserStatus
 from app.models.communication import Notification
+from app.services.notification import NotificationService
+from test_returns import create_return, fulfilled_order
+from test_sales import confirm_sales_order, create_role_user, create_sales_order, register_and_login, setup_sales_dimension, stock_in
 
 
 def create_users(db_session, client):
@@ -71,6 +74,7 @@ def test_mark_read(db_session: Session, client: TestClient) -> None:
     resp = client.post(f"/api/notifications/{n1}/read", headers={"Authorization": f"Bearer {token_a}"})
     assert resp.status_code == 200
     assert resp.json()["is_read"] is True
+    db_session.rollback()
     notif = db_session.get(Notification, n1)
     assert notif.is_read is True
 
@@ -120,6 +124,131 @@ def test_clear_all(db_session: Session, client: TestClient) -> None:
     # User B's notification should be unaffected
     list_b = client.get("/api/notifications", headers={"Authorization": f"Bearer {token_b}"})
     assert len(list_b.json()) == 1
+
+
+def test_clear_all_persists_cleared_at_in_db(db_session: Session, client: TestClient) -> None:
+    token_a, token_b, uid_a, uid_b, tid, n1, n2, n3 = create_users(db_session, client)
+    clear = client.post("/api/notifications/clear-all", headers={"Authorization": f"Bearer {token_a}"})
+    assert clear.status_code == 200
+
+    db_session.rollback()
+    user_a_notifications = (
+        db_session.query(Notification)
+        .filter(Notification.user_id == uid_a)
+        .all()
+    )
+    assert len(user_a_notifications) == 2
+    assert all(notification.cleared_at is not None for notification in user_a_notifications)
+
+    default_list = client.get("/api/notifications", headers={"Authorization": f"Bearer {token_a}"})
+    assert default_list.status_code == 200
+    assert default_list.json() == []
+
+
+def test_confirm_sales_order_creates_inventory_manager_notifications(db_session: Session, client: TestClient) -> None:
+    login = register_and_login(client, "notif-sales-admin@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "NOTIF-SALES")
+    stock_in(client, token, dimension, "10", "notif-sales-stock")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-inv-1@example.com")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-inv-2@example.com")
+    order = create_sales_order(client, token, dimension, "2", "SO-NOTIFY-1")
+
+    confirm = confirm_sales_order(client, token, order, dimension, "2", "notif-confirm-1")
+    assert confirm["sales_order"]["status"] == "CONFIRMED"
+
+    tenant_id = db_session.query(Tenant).one().id
+    inventory_manager_ids = {
+        user.id
+        for user in db_session.query(User).filter(
+            User.tenant_id == tenant_id,
+            User.role == UserRole.INVENTORY_MANAGER,
+        )
+    }
+    rows = (
+        db_session.query(Notification)
+        .filter(
+            Notification.tenant_id == tenant_id,
+            Notification.entity_type == "sales_order",
+            Notification.entity_id == str(order["id"]),
+            Notification.category == "SALES",
+            Notification.type == "INFO",
+        )
+        .all()
+    )
+    notified_ids = {row.user_id for row in rows}
+    assert inventory_manager_ids.issubset(notified_ids)
+    assert all("New order to pick" in row.title for row in rows)
+
+
+def test_submit_return_creates_warning_notification_for_inventory_managers(db_session: Session, client: TestClient) -> None:
+    login = register_and_login(client, "notif-return-admin@example.com")
+    token = login["access_token"]
+    dimension = setup_sales_dimension(client, token, "NOTIF-RET")
+    stock_in(client, token, dimension, "5", "notif-ret-stock")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-ret-inv-1@example.com")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-ret-inv-2@example.com")
+
+    order = fulfilled_order(client, token, dimension, "1", "SO-NOTIF-RET", "FUL-NOTIF-RET")
+    sales_return = create_return(client, token, order, dimension, "1", "RET-NOTIF-1")
+    submit = client.post(f"/api/sales-returns/{sales_return['id']}/submit", json={}, headers={"Authorization": f"Bearer {token}"})
+    assert submit.status_code == 200
+
+    tenant_id = db_session.query(Tenant).one().id
+    inventory_manager_ids = {
+        user.id
+        for user in db_session.query(User).filter(
+            User.tenant_id == tenant_id,
+            User.role == UserRole.INVENTORY_MANAGER,
+        )
+    }
+    rows = (
+        db_session.query(Notification)
+        .filter(
+            Notification.tenant_id == tenant_id,
+            Notification.entity_type == "sales_return",
+            Notification.entity_id == str(sales_return["id"]),
+            Notification.category == "RETURNS",
+            Notification.type == "WARNING",
+        )
+        .all()
+    )
+    notified_ids = {row.user_id for row in rows}
+    assert inventory_manager_ids.issubset(notified_ids)
+    assert all("QC required" in row.title for row in rows)
+
+
+def test_notify_role_exclude_user_id_skips_excluded_user(db_session: Session, client: TestClient) -> None:
+    login = register_and_login(client, "notif-exclude-admin@example.com")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-exclude-inv-1@example.com")
+    create_role_user(client, db_session, UserRole.INVENTORY_MANAGER, "notif-exclude-inv-2@example.com")
+    tenant_id = db_session.query(Tenant).one().id
+    excluded_user = db_session.query(User).filter(User.role == UserRole.INVENTORY_MANAGER).first()
+    assert excluded_user is not None
+
+    NotificationService(db_session).notify_role(
+        tenant_id=tenant_id,
+        role="INVENTORY_MANAGER",
+        title="Exclude test",
+        message="Should skip one user.",
+        type="INFO",
+        category="SYSTEM",
+        entity_type="test",
+        entity_id="exclude",
+        exclude_user_id=excluded_user.id,
+    )
+
+    rows = (
+        db_session.query(Notification)
+        .filter(
+            Notification.tenant_id == tenant_id,
+            Notification.title == "Exclude test",
+        )
+        .all()
+    )
+    notified_ids = {row.user_id for row in rows}
+    assert excluded_user.id not in notified_ids
+    assert len(rows) >= 1
 
 
 def test_cross_tenant_isolation(db_session: Session, client: TestClient) -> None:

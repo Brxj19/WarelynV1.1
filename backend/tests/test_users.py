@@ -259,15 +259,16 @@ class TestDisableUser:
         assert resp.status_code == 403
         assert resp.json()["error"]["code"] == "FORBIDDEN"
 
-    def test_delete_endpoint_disables_user(self, client: TestClient, db_session: Session):
+    def test_delete_endpoint_deletes_user(self, client: TestClient, db_session: Session):
         tenant = _create_tenant(db_session)
         admin = _create_user(db_session, tenant.id)
         staff = _create_user(db_session, tenant.id, email="staff@test.com", role=UserRole.SALES_STAFF, name="Staff")
         db_session.commit()
 
         resp = client.delete(f"/api/users/{staff.id}", headers=_auth_header(admin))
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "DISABLED"
+        assert resp.status_code == 204
+        get_resp = client.get(f"/api/users/{staff.id}", headers=_auth_header(admin))
+        assert get_resp.status_code == 404
 
 
 class TestEnableUser:
@@ -289,16 +290,9 @@ class TestResetPassword:
         staff = _create_user(db_session, tenant.id, email="staff@test.com", role=UserRole.SALES_STAFF, name="Staff")
         db_session.commit()
 
-        resp = client.post(
-            f"/api/users/{staff.id}/reset-password",
-            headers=_auth_header(admin),
-            json={"new_password": "newpassword123"},
-        )
+        resp = client.post(f"/api/users/{staff.id}/reset-password", headers=_auth_header(admin), json={})
         assert resp.status_code == 200
-
-        # Verify new password works by logging in
-        login_resp = client.post("/api/auth/login", json={"email": "staff@test.com", "password": "newpassword123"})
-        assert login_resp.status_code == 200
+        assert resp.json()["id"] == staff.id
 
 
 class TestNonAdminAccess:
