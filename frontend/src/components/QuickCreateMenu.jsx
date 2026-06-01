@@ -11,8 +11,6 @@ export function QuickCreateMenu({ role }) {
   const [isOpen, setIsOpen] = useState(false);
   const entries = quickCreateItems.filter((item) => canSee(item, role));
 
-  if (!entries.length) return null;
-
   useEffect(() => {
     function handlePointerDown(event) {
       if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
@@ -20,6 +18,8 @@ export function QuickCreateMenu({ role }) {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, []);
+
+  if (!entries.length) return null;
 
   return (
     <div className="topbar-popover-anchor" ref={ref}>

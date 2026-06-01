@@ -1,0 +1,411 @@
+
+<style>
+  .section { margin: 2rem 0; }
+  .label { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 8px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--color-background-info); color: var(--color-text-info); font-weight: 500; margin: 2px; }
+  .tag.warn { background: var(--color-background-warning); color: var(--color-text-warning); }
+  .tag.suc { background: var(--color-background-success); color: var(--color-text-success); }
+  .screen { background: var(--color-background-secondary); border-radius: var(--border-radius-lg); padding: 1.5rem; margin-bottom: 1rem; }
+  .mock-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem; margin-bottom: 10px; }
+  .mock-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .avatar.user { background: var(--color-background-info); color: var(--color-text-info); }
+  .avatar.bot { background: var(--color-background-success); color: var(--color-text-success); }
+  .mock-bubble { font-size: 13px; color: var(--color-text-primary); line-height: 1.6; }
+  .mock-bubble.user-b { background: var(--color-background-info); color: var(--color-text-info); border-radius: 16px 16px 4px 16px; padding: 8px 12px; display: inline-block; max-width: 80%; margin-left: auto; }
+  .mock-bubble.bot-b { background: var(--color-background-secondary); border-radius: 4px 16px 16px 16px; padding: 8px 12px; display: inline-block; max-width: 88%; }
+  .msg-row { display: flex; margin-bottom: 10px; }
+  .msg-row.user { justify-content: flex-end; }
+  .msg-row.bot { justify-content: flex-start; gap: 8px; align-items: flex-start; }
+  .skeleton { background: var(--color-border-tertiary); border-radius: 4px; height: 12px; margin: 4px 0; animation: shimmer 1.4s ease-in-out infinite; }
+  @keyframes shimmer { 0%,100%{opacity:.5} 50%{opacity:1} }
+  .skeleton.w100 { width: 100%; }
+  .skeleton.w80 { width: 80%; }
+  .skeleton.w60 { width: 60%; }
+  .skeleton.w40 { width: 40%; }
+  .skeleton.h8 { height: 8px; }
+  .skeleton.circle { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; }
+  .thinking-dots span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--color-text-secondary); margin: 0 2px; animation: bounce 1.2s ease-in-out infinite; }
+  .thinking-dots span:nth-child(2) { animation-delay: .2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce { 0%,80%,100%{transform:scale(0);opacity:.4} 40%{transform:scale(1);opacity:1} }
+  .input-mock { display: flex; align-items: center; gap: 8px; border: 0.5px solid var(--color-border-secondary); border-radius: 99px; padding: 8px 12px; background: var(--color-background-primary); }
+  .input-mock span { flex: 1; font-size: 13px; color: var(--color-text-tertiary); }
+  .send-btn { width: 30px; height: 30px; border-radius: 50%; background: var(--color-text-primary); display: flex; align-items: center; justify-content: center; }
+  .send-btn i { color: var(--color-background-primary); font-size: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; border: 0.5px solid var(--color-border-secondary); border-radius: 99px; padding: 4px 10px; background: var(--color-background-primary); color: var(--color-text-secondary); margin: 3px; cursor: pointer; }
+  .chip:hover { background: var(--color-background-secondary); }
+  .report-mini { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); overflow: hidden; margin-top: 8px; }
+  .report-head { background: var(--color-background-secondary); padding: 6px 10px; display: flex; justify-content: space-between; align-items: center; }
+  .report-row { display: flex; font-size: 11px; padding: 4px 10px; border-bottom: 0.5px solid var(--color-border-tertiary); gap: 16px; }
+  .report-row:last-child { border-bottom: none; }
+  .report-row.head { font-weight: 500; color: var(--color-text-secondary); background: var(--color-background-secondary); }
+  .insight-row { display: flex; gap: 6px; font-size: 11px; color: var(--color-text-secondary); padding: 4px 10px; border-top: 0.5px solid var(--color-border-tertiary); }
+  .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-text-info); margin-top: 4px; flex-shrink: 0; }
+  .faq-sug { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 10px 12px; margin-bottom: 6px; }
+  .faq-sug:hover { border-color: var(--color-border-info); background: var(--color-background-info); }
+  .conf-badge { font-size: 10px; padding: 2px 7px; border-radius: 99px; font-weight: 500; }
+  .conf-high { background: var(--color-background-success); color: var(--color-text-success); }
+  .conf-med { background: var(--color-background-warning); color: var(--color-text-warning); }
+  .action-link { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; border: 0.5px solid var(--color-border-secondary); border-radius: 6px; padding: 4px 8px; color: var(--color-text-info); margin: 2px; }
+  .divider { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-align: center; padding: 6px 0; letter-spacing: .05em; }
+  .citation-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); border-radius: 99px; padding: 2px 7px; margin: 2px; color: var(--color-text-secondary); }
+  .feedback-row { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+  .fb-btn { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; border: 0.5px solid var(--color-border-tertiary); background: transparent; cursor: pointer; }
+  .fb-btn:hover { background: var(--color-background-secondary); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width: 540px) { .two-col { grid-template-columns: 1fr; } }
+  .change-badge { font-size: 10px; font-weight: 500; background: var(--color-background-danger); color: var(--color-text-danger); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
+  .new-badge { font-size: 10px; font-weight: 500; background: var(--color-background-success); color: var(--color-text-success); border-radius: 99px; padding: 1px 7px; margin-left: 6px; }
+</style>
+
+<div style="padding: 1rem 0;">
+
+  <!-- ─── Section 1: Current vs New ─── -->
+  <div class="section">
+    <div class="label">Current state → target state</div>
+    <div class="two-col">
+      <div class="mock-card" style="opacity:.55">
+        <div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--color-text-secondary)">Current copilot <span class="change-badge">remove</span></div>
+        <div style="font-size:11px;color:var(--color-text-tertiary);line-height:1.7">
+          • Page with 3 separate card sections<br>
+          • Plain &lt;Input&gt; + Send button above chat<br>
+          • Suggested prompts separate card<br>
+          • Messages in another card below<br>
+          • Messages look like bordered boxes<br>
+          • No skeleton, no typing indicator<br>
+          • No scroll lock to bottom<br>
+          • Telemetry widget above conversation
+        </div>
+      </div>
+      <div class="mock-card">
+        <div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--color-text-primary)">Target copilot <span class="new-badge">build</span></div>
+        <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.7">
+          • Full-height chat column, input pinned at bottom<br>
+          • Messages bubble layout (user right, bot left)<br>
+          • Typing skeleton while waiting<br>
+          • Scroll auto-locks to newest message<br>
+          • Report table renders inside bot bubble<br>
+          • Citations as compact pills<br>
+          • Suggested prompts as chips above input<br>
+          • Empty state with role-specific suggestions
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Section 2: Copilot layout mockup ─── -->
+  <div class="section">
+    <div class="label">AI Copilot — full page layout</div>
+    <div class="screen">
+
+      <!-- Top bar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);font-weight:500;letter-spacing:.05em;text-transform:uppercase">Tenant Admin</div>
+          <div style="font-size:16px;font-weight:500;color:var(--color-text-primary);display:flex;align-items:center;gap:6px">
+            <i class="ti ti-sparkles" aria-hidden="true" style="font-size:18px;color:var(--color-text-info)"></i>
+            AI Copilot
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:11px;color:var(--color-text-tertiary)">Session #42</span>
+          <span class="tag">12 msgs</span>
+          <button style="font-size:11px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:4px 8px;background:none;color:var(--color-text-secondary);cursor:pointer">New session</button>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden">
+
+        <!-- Message list -->
+        <div style="padding:1rem;min-height:280px">
+
+          <!-- Empty state (shown on first load) -->
+          <div style="text-align:center;padding:1.5rem 0 1rem;border-bottom:0.5px dashed var(--color-border-tertiary);margin-bottom:12px">
+            <i class="ti ti-robot" aria-hidden="true" style="font-size:28px;color:var(--color-text-tertiary);display:block;margin-bottom:6px"></i>
+            <div style="font-size:13px;color:var(--color-text-secondary)">Ask about your operations, reports, or workflows.</div>
+            <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">Only Warelyn questions answered.</div>
+          </div>
+
+          <!-- Suggested prompts row (chips, shown when no messages yet) -->
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px">Try asking</div>
+            <div>
+              <span class="chip"><i class="ti ti-table" aria-hidden="true" style="font-size:12px"></i>Show warehouse stock</span>
+              <span class="chip"><i class="ti ti-alert-triangle" aria-hidden="true" style="font-size:12px"></i>Low stock items</span>
+              <span class="chip"><i class="ti ti-list-check" aria-hidden="true" style="font-size:12px"></i>Open workflow tasks</span>
+              <span class="chip"><i class="ti ti-refresh" aria-hidden="true" style="font-size:12px"></i>Reconciliation</span>
+            </div>
+          </div>
+
+          <!-- USER message -->
+          <div class="msg-row user">
+            <div class="mock-bubble user-b">Show me the low stock report</div>
+          </div>
+
+          <!-- BOT message with report data -->
+          <div class="msg-row bot">
+            <div class="avatar bot"><i class="ti ti-sparkles" aria-hidden="true" style="font-size:12px"></i></div>
+            <div style="max-width:90%">
+              <div class="mock-bubble bot-b" style="display:block;padding:10px 14px">
+                <div style="font-size:13px;line-height:1.6;margin-bottom:8px">Here are the products currently below their reorder levels. <strong>3 items</strong> need urgent attention with zero available stock.</div>
+                <!-- Report table -->
+                <div class="report-mini">
+                  <div class="report-head">
+                    <span style="font-size:11px;font-weight:500;color:var(--color-text-primary)">Low Stock Report</span>
+                    <span style="font-size:10px;color:var(--color-text-info)">View full report →</span>
+                  </div>
+                  <div class="report-row head"><span style="flex:2">Product</span><span style="flex:1;text-align:right">Available</span><span style="flex:1;text-align:right">Reorder Level</span><span style="flex:1;text-align:right">Shortage</span></div>
+                  <div class="report-row"><span style="flex:2;color:var(--color-text-danger)">Widget Pro XL</span><span style="flex:1;text-align:right">0</span><span style="flex:1;text-align:right">50</span><span style="flex:1;text-align:right;color:var(--color-text-danger)">–50</span></div>
+                  <div class="report-row"><span style="flex:2">Blue Cable 2m</span><span style="flex:1;text-align:right">4</span><span style="flex:1;text-align:right">25</span><span style="flex:1;text-align:right">–21</span></div>
+                  <div class="report-row"><span style="flex:2">Filter Unit A3</span><span style="flex:1;text-align:right">8</span><span style="flex:1;text-align:right">30</span><span style="flex:1;text-align:right">–22</span></div>
+                  <div class="insight-row"><div class="dot"></div><span>3 products below reorder level.</span></div>
+                  <div class="insight-row"><div class="dot"></div><span>Widget Pro XL has zero available — urgent.</span></div>
+                </div>
+                <!-- Citations -->
+                <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:2px">
+                  <span class="citation-pill"><i class="ti ti-file-text" aria-hidden="true" style="font-size:10px"></i>Inventory Knowledge</span>
+                  <span class="citation-pill"><i class="ti ti-database" aria-hidden="true" style="font-size:10px"></i>Live tenant data</span>
+                </div>
+                <!-- Actions + feedback -->
+                <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+                  <span class="action-link"><i class="ti ti-external-link" aria-hidden="true" style="font-size:10px"></i>Low Stock Report</span>
+                  <span class="action-link"><i class="ti ti-shopping-cart" aria-hidden="true" style="font-size:10px"></i>Create PO</span>
+                </div>
+                <div class="feedback-row">
+                  <button class="fb-btn" aria-label="Helpful"><i class="ti ti-thumb-up" aria-hidden="true" style="font-size:12px"></i></button>
+                  <button class="fb-btn" aria-label="Not helpful"><i class="ti ti-thumb-down" aria-hidden="true" style="font-size:12px"></i></button>
+                  <span style="font-size:10px;color:var(--color-text-tertiary);margin-left:4px">confidence 0.82</span>
+                  <span class="conf-badge conf-high" style="margin-left:auto">HIGH</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- USER message 2 -->
+          <div class="msg-row user">
+            <div class="mock-bubble user-b">What is the weather today?</div>
+          </div>
+
+          <!-- BOT: off-topic response -->
+          <div class="msg-row bot">
+            <div class="avatar bot"><i class="ti ti-sparkles" aria-hidden="true" style="font-size:12px"></i></div>
+            <div style="max-width:88%">
+              <div class="mock-bubble bot-b" style="display:block;padding:10px 14px">
+                <div style="font-size:13px;color:var(--color-text-secondary);font-style:italic">I can only help with Warelyn Inventory questions.</div>
+                <div style="margin-top:6px"><span class="action-link"><i class="ti ti-home" aria-hidden="true" style="font-size:10px"></i>Go to dashboard</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- BOT: typing skeleton (shown while waiting) -->
+          <div class="divider">── while generating ──</div>
+          <div class="msg-row bot">
+            <div class="skeleton circle"></div>
+            <div style="flex:1;max-width:70%">
+              <div class="skeleton w100" style="height:10px"></div>
+              <div class="skeleton w80" style="height:10px"></div>
+              <div class="skeleton w60" style="height:10px"></div>
+              <div style="margin-top:8px"><span class="thinking-dots"><span></span><span></span><span></span></span> <span style="font-size:11px;color:var(--color-text-tertiary)">Thinking…</span></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Input area pinned bottom -->
+        <div style="border-top:0.5px solid var(--color-border-tertiary);padding:10px 12px;background:var(--color-background-primary)">
+          <div class="input-mock">
+            <i class="ti ti-sparkles" aria-hidden="true" style="font-size:16px;color:var(--color-text-info)"></i>
+            <span>Ask about stock, orders, tasks, reports…</span>
+            <div class="send-btn" aria-label="Send"><i class="ti ti-send" aria-hidden="true"></i></div>
+          </div>
+          <div style="font-size:10px;color:var(--color-text-tertiary);text-align:center;margin-top:5px">Warelyn Copilot • Read-only • Grounded answers only</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── Section 3: FAQ page ─── -->
+  <div class="section">
+    <div class="label">FAQ Page — redesigned</div>
+    <div class="screen">
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <i class="ti ti-help-circle" aria-hidden="true" style="font-size:20px;color:var(--color-text-info)"></i>
+        <div>
+          <div style="font-size:16px;font-weight:500">FAQ Assistant</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary)">Grounded answers with citations</div>
+        </div>
+      </div>
+
+      <!-- Search input -->
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div class="input-mock" style="flex:1">
+          <i class="ti ti-search" aria-hidden="true" style="font-size:15px;color:var(--color-text-tertiary)"></i>
+          <span>e.g. Why is my order stuck at CONFIRMED?</span>
+          <div class="send-btn"><i class="ti ti-arrow-right" aria-hidden="true"></i></div>
+        </div>
+      </div>
+
+      <!-- Suggestions skeleton (loading state) -->
+      <div class="divider">── suggestions loading state ──</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div class="mock-card" style="padding:10px">
+          <div class="skeleton w80" style="height:10px"></div>
+          <div class="skeleton w60 h8" style="margin-top:5px"></div>
+        </div>
+        <div class="mock-card" style="padding:10px">
+          <div class="skeleton w80" style="height:10px"></div>
+          <div class="skeleton w60 h8" style="margin-top:5px"></div>
+        </div>
+        <div class="mock-card" style="padding:10px">
+          <div class="skeleton w70" style="height:10px"></div>
+          <div class="skeleton w50 h8" style="margin-top:5px"></div>
+        </div>
+        <div class="mock-card" style="padding:10px">
+          <div class="skeleton w80" style="height:10px"></div>
+          <div class="skeleton w60 h8" style="margin-top:5px"></div>
+        </div>
+      </div>
+
+      <!-- Suggestions loaded -->
+      <div class="divider">── loaded ──</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div class="faq-sug">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">How does the SO to fulfillment flow work?</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">Order confirmation, pick, pack and commit flow.</div>
+        </div>
+        <div class="faq-sug">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">How do I fix reconciliation mismatches?</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">Inspect and resolve inventory mismatches safely.</div>
+        </div>
+        <div class="faq-sug">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">What does each workflow task status mean?</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">OPEN, IN_PROGRESS, COMPLETED meanings.</div>
+        </div>
+        <div class="faq-sug">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">Which low-stock items are most urgent?</div>
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:2px">Prioritize replenishment and warehouse actions.</div>
+        </div>
+      </div>
+
+      <!-- Answer skeleton (while asking) -->
+      <div class="divider">── answer loading skeleton ──</div>
+      <div class="mock-card" style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div class="skeleton w40" style="height:10px"></div>
+          <div class="skeleton" style="width:48px;height:18px;border-radius:99px"></div>
+        </div>
+        <div class="skeleton w100"></div>
+        <div class="skeleton w100"></div>
+        <div class="skeleton w80"></div>
+        <div class="skeleton w90" style="margin-top:6px"></div>
+        <div class="skeleton w60"></div>
+        <div style="margin-top:10px;display:flex;gap:6px">
+          <div class="skeleton" style="width:80px;height:20px;border-radius:99px"></div>
+          <div class="skeleton" style="width:100px;height:20px;border-radius:99px"></div>
+        </div>
+      </div>
+
+      <!-- Answer result -->
+      <div class="divider">── answer shown ──</div>
+      <div class="mock-card" style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:12px;font-weight:500;color:var(--color-text-primary)">Answer</div>
+          <span class="conf-badge conf-high">HIGH · 0.87</span>
+        </div>
+        <div style="font-size:13px;line-height:1.7;color:var(--color-text-primary);margin-bottom:10px">
+          To reduce reconciliation mismatches, run the reconciliation process from Reports → Reconciliation. Common causes include unrecorded stock movements, incorrectly committed receipts, and returns with wrong quantities.
+        </div>
+        <div style="margin-bottom:6px">
+          <span class="citation-pill"><i class="ti ti-file-text" aria-hidden="true" style="font-size:10px"></i>Reports Knowledge</span>
+          <span class="citation-pill"><i class="ti ti-file-text" aria-hidden="true" style="font-size:10px"></i>Inventory Knowledge</span>
+          <span class="citation-pill"><i class="ti ti-file-text" aria-hidden="true" style="font-size:10px"></i>FAQ Answers</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          <span class="action-link"><i class="ti ti-external-link" aria-hidden="true" style="font-size:10px"></i>Reconciliation Report</span>
+          <span class="action-link"><i class="ti ti-external-link" aria-hidden="true" style="font-size:10px"></i>Stock Movements</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── Section 4: FAQ Widget ─── -->
+  <div class="section">
+    <div class="label">FAQ Floating Widget — bottom-right</div>
+    <div class="screen" style="position:relative;min-height:380px">
+
+      <!-- Widget panel -->
+      <div style="position:absolute;bottom:56px;right:0;width:320px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-lg);background:var(--color-background-primary);box-shadow:0 4px 24px rgba(0,0,0,.08);overflow:hidden">
+
+        <!-- Header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)">
+          <div style="display:flex;align-items:center;gap:6px">
+            <i class="ti ti-sparkles" aria-hidden="true" style="font-size:14px;color:var(--color-text-info)"></i>
+            <span style="font-size:13px;font-weight:500">FAQ Assistant</span>
+          </div>
+          <i class="ti ti-x" aria-hidden="true" style="font-size:14px;color:var(--color-text-tertiary);cursor:pointer"></i>
+        </div>
+
+        <!-- Messages area -->
+        <div style="padding:10px;min-height:160px;max-height:220px;overflow-y:auto">
+
+          <!-- Suggestions skeleton (shown once on first open) -->
+          <div style="margin-bottom:8px">
+            <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:5px">Suggested</div>
+            <div class="skeleton w100" style="height:28px;border-radius:6px;margin-bottom:4px"></div>
+            <div class="skeleton w90" style="height:28px;border-radius:6px;margin-bottom:4px"></div>
+            <div class="skeleton w80" style="height:28px;border-radius:6px"></div>
+          </div>
+          <div class="divider">── after load ──</div>
+
+          <!-- User bubble -->
+          <div class="msg-row user" style="margin-bottom:6px">
+            <div class="mock-bubble user-b" style="font-size:12px;padding:6px 10px">How do I check low stock?</div>
+          </div>
+
+          <!-- Bot typing skeleton -->
+          <div class="msg-row bot" style="margin-bottom:6px">
+            <div class="avatar bot" style="width:22px;height:22px;font-size:10px"><i class="ti ti-sparkles" aria-hidden="true" style="font-size:10px"></i></div>
+            <div style="padding:8px 10px;background:var(--color-background-secondary);border-radius:4px 12px 12px 12px;max-width:80%">
+              <div class="skeleton w100" style="height:8px"></div>
+              <div class="skeleton w80" style="height:8px;margin-top:4px"></div>
+              <div style="margin-top:5px"><span class="thinking-dots"><span></span><span></span><span></span></span></div>
+            </div>
+          </div>
+
+          <!-- Bot answer -->
+          <div class="msg-row bot" style="margin-bottom:4px">
+            <div class="avatar bot" style="width:22px;height:22px;font-size:10px"><i class="ti ti-sparkles" aria-hidden="true" style="font-size:10px"></i></div>
+            <div style="padding:8px 10px;background:var(--color-background-secondary);border-radius:4px 12px 12px 12px;max-width:85%;font-size:12px;line-height:1.6;color:var(--color-text-primary)">
+              Go to Reports → Low Stock to see all products below reorder levels.
+              <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:2px;align-items:center">
+                <span class="conf-badge conf-high" style="font-size:9px">HIGH</span>
+                <span class="action-link" style="font-size:10px;padding:2px 6px"><i class="ti ti-external-link" aria-hidden="true" style="font-size:9px"></i>Low Stock</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Input -->
+        <div style="border-top:0.5px solid var(--color-border-tertiary);padding:8px 10px">
+          <div class="input-mock" style="padding:5px 8px">
+            <span style="font-size:12px">Ask a question…</span>
+            <div class="send-btn" style="width:24px;height:24px"><i class="ti ti-send" aria-hidden="true" style="font-size:12px"></i></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FAB button -->
+      <div style="position:absolute;bottom:0;right:0;width:44px;height:44px;border-radius:50%;background:var(--color-text-primary);display:flex;align-items:center;justify-content:center">
+        <i class="ti ti-sparkles" aria-hidden="true" style="font-size:18px;color:var(--color-background-primary)"></i>
+      </div>
+
+    </div>
+  </div>
+
+</div>

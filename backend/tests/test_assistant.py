@@ -8,6 +8,8 @@ from app.core.security import get_password_hash
 from app.models.assistant import AssistantFeedbackValue, AssistantMessage, AssistantMessageRole, FAQChunk, FAQDocument, KnowledgeSourceType
 from app.models.audit import AuditLog
 from app.models.auth import Tenant, TenantStatus, User, UserRole, UserStatus
+from app.models.inventory import WarehouseStock
+from app.models.master_data import Product, RecordStatus, Warehouse, WarehouseLocation
 from app.services.assistant import AssistantService
 
 
@@ -93,6 +95,73 @@ def _create_doc_chunk(
     db.add(chunk)
     db.flush()
     return chunk
+
+
+def test_keyword_search_tokenizes_question_terms(db_session: Session):
+    tenant = _create_tenant(db_session, company="Search Co", email="search@example.com")
+    _create_doc_chunk(
+        db_session,
+        tenant_id=None,
+        slug="reconciliation-help",
+        text="Reconciliation reports show mismatch rows when ledger balances do not match expected stock.",
+    )
+    db_session.commit()
+
+    rows = AssistantService(db_session).repository.search_keyword_chunks(
+        tenant_id=tenant.id,
+        term="How do I fix a reconciliation mismatch?",
+        limit=5,
+    )
+
+    assert rows
+    joined = " ".join(row.searchable_text for row in rows)
+    assert "reconciliation" in joined or "mismatch" in joined
+
+
+def test_lexical_score_rewards_relevant_terms(db_session: Session):
+    score = AssistantService(db_session)._lexical_score(
+        "reconciliation mismatch",
+        "reconciliation reports show mismatches between ledger",
+    )
+
+    assert score > 0.3
+
+
+def test_chunk_text_uses_smaller_overlapping_chunks(db_session: Session):
+    text = "A" * 2000
+    chunks = AssistantService(db_session)._chunk_text(
+        text,
+        source_uri="docs/test.md",
+        title="Long Test",
+        source_type=KnowledgeSourceType.DOC.value,
+        action_to="/reports",
+    )
+
+    assert len(chunks) > 1
+    assert all(len(chunk["content"]) < 700 for chunk in chunks)
+
+
+def test_reindex_global_knowledge_indexes_operational_sources(db_session: Session, monkeypatch):
+    service = AssistantService(db_session)
+    monkeypatch.setattr(service, "_embed_many", lambda texts: [None for _ in texts])
+
+    result = service.reindex_global_knowledge()
+
+    assert result["documents_indexed"] >= 8
+    assert result["chunks_indexed"] >= result["documents_indexed"]
+
+
+def test_detect_report_intent_for_warehouse_stock(db_session: Session):
+    intent = AssistantService(db_session)._detect_report_intent("show me warehouse stock report")
+
+    assert intent is not None
+    assert intent["report_type"] == "warehouse_stock"
+
+
+def test_detect_report_intent_ignores_off_topic_question(db_session: Session):
+    intent = AssistantService(db_session)._detect_report_intent("what is the weather today")
+
+    assert intent is None
 
 
 def test_tenant_admin_can_create_assistant_session(client: TestClient):
@@ -256,3 +325,117 @@ def test_session_message_feedback_lifecycle_with_audit(db_session: Session, monk
         )
     )
     assert any(message.role == AssistantMessageRole.ASSISTANT for message in stored_assistant_messages)
+
+
+def test_ask_session_returns_low_stock_report_data(db_session: Session, monkeypatch):
+    tenant = _create_tenant(db_session, company="Report Co", email="report@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="report-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    warehouse = Warehouse(
+        tenant_id=tenant.id,
+        name="Main Warehouse",
+        code="MAIN",
+        status=RecordStatus.ACTIVE,
+    )
+    db_session.add(warehouse)
+    db_session.flush()
+    location = WarehouseLocation(
+        tenant_id=tenant.id,
+        warehouse_id=warehouse.id,
+        code="A1",
+        name="Aisle 1",
+        status=RecordStatus.ACTIVE,
+    )
+    product = Product(
+        tenant_id=tenant.id,
+        name="Blue Widget",
+        sku="BW-001",
+        unit="pcs",
+        reorder_level=20,
+        cost_price=5,
+        status=RecordStatus.ACTIVE,
+    )
+    db_session.add_all([location, product])
+    db_session.flush()
+    db_session.add(
+        WarehouseStock(
+            tenant_id=tenant.id,
+            product_id=product.id,
+            warehouse_id=warehouse.id,
+            location_id=location.id,
+            quantity_on_hand=8,
+            quantity_reserved=2,
+            quantity_available=6,
+        )
+    )
+    chunk = _create_doc_chunk(
+        db_session,
+        tenant_id=None,
+        slug="low-stock-report",
+        text="Low stock reports show products below reorder levels and shortage quantities.",
+    )
+    db_session.commit()
+
+    service = AssistantService(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Report Data")
+    monkeypatch.setattr(
+        service,
+        "_retrieve_chunks",
+        lambda tenant_id, question: [{"chunk": chunk, "score": 0.9}],
+    )
+    monkeypatch.setattr(
+        service,
+        "_grounded_answer",
+        lambda **kwargs: (
+            {
+                "answer": "Here is the low stock report.",
+                "confidence": "HIGH",
+                "confidence_score": 0.9,
+                "suggested_actions": [{"label": "Open Low Stock", "to": "/reports/low-stock"}],
+                "is_off_topic": False,
+            },
+            {"total_tokens": 12},
+        ),
+    )
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session.id,
+        question="show low stock",
+    )
+
+    assert result["report_data"]["report_type"] == "low_stock"
+    assert isinstance(result["report_data"]["rows"], list)
+    assert result["report_data"]["rows"][0]["product"] == "Blue Widget"
+
+
+def test_ask_session_blocks_off_topic_question(db_session: Session):
+    tenant = _create_tenant(db_session, company="Guardrail Co", email="guard@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="guard-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    db_session.commit()
+
+    service = AssistantService(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Guardrail")
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session.id,
+        question="what is 2+2",
+    )
+
+    assert result["is_off_topic"] is True
+    assert result["report_data"] is None
+    assert result["citations"] == []
+    assert result["answer"] == "I can only help with Warelyn Inventory questions."

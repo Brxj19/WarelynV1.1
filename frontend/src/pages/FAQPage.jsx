@@ -1,4 +1,4 @@
-import { ExternalLink, Search } from 'lucide-react';
+import { ExternalLink, FileText, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -8,7 +8,6 @@ import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
-import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../hooks/useToast.jsx';
@@ -54,8 +53,6 @@ export function FAQPage() {
     }
   }
 
-  if (loading) return <LoadingState message="Loading FAQ suggestions..." />;
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -90,7 +87,16 @@ export function FAQPage() {
           <h2 className="text-lg font-semibold text-warelyn-text">Suggested questions</h2>
         </CardHeader>
         <CardBody>
-          {suggestions.length === 0 ? (
+          {loading ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="rounded-lg border border-warelyn-border bg-white px-3 py-3 space-y-1.5">
+                  <div className="h-3 bg-warelyn-border rounded animate-pulse w-4/5" />
+                  <div className="h-2.5 bg-warelyn-border rounded animate-pulse w-3/5" />
+                </div>
+              ))}
+            </div>
+          ) : suggestions.length === 0 ? (
             <EmptyState title="No suggestions available" description="Try asking your question directly above." />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -113,11 +119,41 @@ export function FAQPage() {
         </CardBody>
       </Card>
 
+      {asking && (
+        <Card>
+          <CardHeader className="flex items-center justify-between">
+            <div className="h-4 w-24 bg-warelyn-border rounded animate-pulse" />
+            <div className="h-5 w-16 bg-warelyn-border rounded-full animate-pulse" />
+          </CardHeader>
+          <CardBody className="space-y-3">
+            <div className="space-y-2">
+              <div className="h-3 bg-warelyn-border rounded animate-pulse w-full" />
+              <div className="h-3 bg-warelyn-border rounded animate-pulse w-full" />
+              <div className="h-3 bg-warelyn-border rounded animate-pulse w-4/5" />
+              <div className="h-3 bg-warelyn-border rounded animate-pulse w-5/6" />
+              <div className="h-3 bg-warelyn-border rounded animate-pulse w-3/5" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <div className="h-5 w-24 bg-warelyn-border rounded-full animate-pulse" />
+              <div className="h-5 w-28 bg-warelyn-border rounded-full animate-pulse" />
+              <div className="h-5 w-20 bg-warelyn-border rounded-full animate-pulse" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-7 w-32 bg-warelyn-border rounded-md animate-pulse" />
+              <div className="h-7 w-28 bg-warelyn-border rounded-md animate-pulse" />
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
       {answer ? (
         <Card>
           <CardHeader className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-warelyn-text">Answer</h2>
-            <Badge tone={confidenceTone(answer.confidence)}>{answer.confidence}</Badge>
+            <Badge tone={confidenceTone(answer.confidence)}>
+              {answer.confidence}
+              {typeof answer.confidence_score === 'number' && ` · ${answer.confidence_score.toFixed(2)}`}
+            </Badge>
           </CardHeader>
           <CardBody className="space-y-4">
             <p className="whitespace-pre-wrap text-sm text-warelyn-text">{answer.answer}</p>
@@ -125,13 +161,12 @@ export function FAQPage() {
             <div>
               <h3 className="text-sm font-semibold text-warelyn-text">Citations</h3>
               {answer.citations?.length ? (
-                <div className="mt-2 space-y-2">
-                  {answer.citations.map((citation, index) => (
-                    <div className="rounded-lg border border-warelyn-border bg-slate-50 px-3 py-2 text-xs" key={`${citation.chunk_id}-${index}`}>
-                      <p className="font-semibold text-warelyn-text">{citation.title}</p>
-                      <p className="text-warelyn-muted">{citation.source_type}</p>
-                      {citation.source_uri ? <p className="text-warelyn-muted">{citation.source_uri}</p> : null}
-                    </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {answer.citations.map((c, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-gray-50 border border-warelyn-border rounded-full px-2.5 py-1 text-warelyn-muted">
+                      <FileText size={10} />
+                      {c.title}
+                    </span>
                   ))}
                 </div>
               ) : (

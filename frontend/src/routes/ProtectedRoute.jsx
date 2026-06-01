@@ -15,6 +15,10 @@ export function ProtectedRoute({ requiredRole }) {
     return <Navigate replace state={{ from: location }} to="/login" />;
   }
 
+  if (!requiredRole && user?.role === 'SUPER_ADMIN') {
+    return <Navigate replace to="/admin" />;
+  }
+
   if (requiredRole && user?.role !== requiredRole) {
     return <Navigate replace to="/dashboard" />;
   }

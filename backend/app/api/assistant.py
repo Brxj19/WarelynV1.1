@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.dependencies.auth import require_roles
+from app.dependencies.auth import require_roles, require_super_admin
 from app.models.auth import UserRole
 from app.schemas.assistant import (
     AssistantAskRequest,
@@ -14,6 +14,7 @@ from app.schemas.assistant import (
     AssistantSessionDetailRead,
     AssistantSessionRead,
     AssistantTelemetryRead,
+    CopilotReportData,
     FAQAskRequest,
     FAQAskResponse,
     FAQSuggestionRead,
@@ -43,6 +44,14 @@ def faq_suggestions(
     return [FAQSuggestionRead(**row) for row in service.faq_suggestions(context.role)]
 
 
+@router.post("/admin/reindex", response_model=dict)
+def admin_reindex(
+    context: UserContext = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    return AssistantService(db).reindex_global_knowledge()
+
+
 @router.post("/faq/ask", response_model=FAQAskResponse)
 def ask_faq(
     payload: FAQAskRequest,
@@ -60,8 +69,10 @@ def ask_faq(
     return FAQAskResponse(
         answer=result["answer"],
         confidence=result["confidence"],
+        confidence_score=result.get("confidence_score"),
         citations=result["citations"],
         suggested_actions=result["suggested_actions"],
+        is_off_topic=result.get("is_off_topic", False),
     )
 
 
@@ -117,6 +128,8 @@ def ask_session(
         confidence=result["confidence"],
         citations=result["citations"],
         suggested_actions=result["suggested_actions"],
+        report_data=CopilotReportData(**result["report_data"]) if result.get("report_data") else None,
+        is_off_topic=result.get("is_off_topic", False),
     )
 
 
@@ -144,4 +157,3 @@ def telemetry(
 ) -> AssistantTelemetryRead:
     data = AssistantService(db).telemetry(tenant_id=context.tenant_id)
     return AssistantTelemetryRead(**data)
-

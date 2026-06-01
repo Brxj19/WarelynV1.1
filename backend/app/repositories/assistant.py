@@ -3,6 +3,13 @@ from sqlalchemy.orm import Session
 
 from app.models.assistant import AssistantFeedback, AssistantMessage, AssistantSession, FAQChunk, FAQDocument, KnowledgeSourceType
 
+STOP_WORDS = frozenset({
+    "how", "do", "i", "a", "an", "the", "is", "are", "what", "why", "when", "where",
+    "which", "my", "does", "can", "to", "for", "in", "of", "and", "or", "at", "with",
+    "that", "this", "it", "its", "me", "we", "us", "be", "have", "has", "had", "was",
+    "were", "will", "would", "could", "should", "may", "might", "not", "no", "get", "got",
+})
+
 
 class AssistantRepository:
     def __init__(self, db: Session) -> None:
@@ -87,18 +94,26 @@ class AssistantRepository:
         return self.db.scalar(stmt) or 0
 
     def search_keyword_chunks(self, *, tenant_id: int, term: str, limit: int) -> list[FAQChunk]:
-        like_term = f"%{term.lower()}%"
-        return list(
-            self.db.scalars(
-                select(FAQChunk)
-                .where(
-                    or_(FAQChunk.tenant_id.is_(None), FAQChunk.tenant_id == tenant_id),
-                    func.lower(FAQChunk.searchable_text).like(like_term),
-                )
-                .order_by(FAQChunk.updated_at.desc(), FAQChunk.id.desc())
-                .limit(limit)
+        tokens = [
+            t.strip("?.,!:;\"'()")
+            for t in term.lower().split()
+            if len(t.strip("?.,!:;\"'()")) > 2 and t.strip("?.,!:;\"'()") not in STOP_WORDS
+        ]
+        if not tokens:
+            return self.list_recent_chunks(tenant_id=tenant_id, limit=limit)
+        conditions = [
+            func.lower(FAQChunk.searchable_text).like(f"%{token}%")
+            for token in tokens[:6]
+        ]
+        return list(self.db.scalars(
+            select(FAQChunk)
+            .where(
+                or_(FAQChunk.tenant_id.is_(None), FAQChunk.tenant_id == tenant_id),
+                or_(*conditions),
             )
-        )
+            .order_by(FAQChunk.updated_at.desc(), FAQChunk.id.desc())
+            .limit(limit)
+        ))
 
     def list_recent_chunks(self, *, tenant_id: int, limit: int) -> list[FAQChunk]:
         return list(

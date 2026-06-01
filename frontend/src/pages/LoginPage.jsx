@@ -38,8 +38,13 @@ export function LoginPage() {
     setIsSubmitting(true);
     setError('');
     try {
-      await login(values);
-      navigate(location.state?.from?.pathname ?? '/dashboard', { replace: true });
+      const data = await login(values);
+      const requestedPath = location.state?.from?.pathname;
+      const fallbackPath = data.user?.role === 'SUPER_ADMIN' ? '/admin' : '/dashboard';
+      const destination = data.user?.role === 'SUPER_ADMIN' && !requestedPath?.startsWith('/admin')
+        ? '/admin'
+        : requestedPath ?? fallbackPath;
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.payload?.error?.message ?? 'Unable to sign in.');
     } finally {

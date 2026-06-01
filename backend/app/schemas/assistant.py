@@ -28,8 +28,10 @@ class FAQSuggestionRead(BaseModel):
 class FAQAskResponse(BaseModel):
     answer: str
     confidence: str
+    confidence_score: float | None = None
     citations: list[CitationRead]
     suggested_actions: list[SuggestedActionRead] = Field(default_factory=list)
+    is_off_topic: bool = False
 
 
 class AssistantSessionCreateRequest(BaseModel):
@@ -72,11 +74,24 @@ class AssistantSessionDetailRead(BaseModel):
     messages: list[AssistantMessageRead]
 
 
+class CopilotReportData(BaseModel):
+    report_type: str
+    title: str
+    columns: list[str]
+    row_keys: list[str]
+    rows: list[dict]
+    total_rows: int
+    insights: list[str]
+    action_url: str
+
+
 class AssistantAskResponse(BaseModel):
     message: AssistantMessageRead
     confidence: str
     citations: list[CitationRead]
     suggested_actions: list[SuggestedActionRead] = Field(default_factory=list)
+    report_data: CopilotReportData | None = None
+    is_off_topic: bool = False
 
 
 class AssistantFeedbackRequest(BaseModel):
