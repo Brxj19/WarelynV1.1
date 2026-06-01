@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     otp_expire_minutes: int = 10
     otp_max_attempts: int = 5
 
+    gemini_api_key: str = ""
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_chat_model: str = "gemini-1.5-flash"
+    gemini_embedding_model: str = "text-embedding-004"
+    ai_retrieval_candidates: int = 24
+    ai_retrieval_top_k: int = 6
+    ai_min_confidence: float = 0.42
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   BadgePlus,
   BarChart3,
+  Bot,
   Boxes,
   Building2,
   CalendarClock,
@@ -30,7 +31,6 @@ import {
   RotateCcw,
   Scale,
   ScrollText,
-  Search,
   Send,
   Settings,
   ShieldAlert,
@@ -65,6 +65,7 @@ export const navGroups = [
     roles: ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'SALES_STAFF', 'VIEWER'],
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', section: 'Overview', to: '/dashboard' },
+      { icon: Bot, label: 'AI Copilot', section: 'Overview', to: '/assistant-copilot', roles: ['TENANT_ADMIN'] },
       { icon: Inbox, label: 'My Tasks', section: 'Overview', to: '/my-tasks', roles: taskRoles },
     ],
   },

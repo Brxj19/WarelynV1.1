@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.assistant import router as assistant_router
 from app.api.admin import router as admin_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
@@ -26,6 +27,7 @@ from app.api.warehouses import router as warehouses_router
 from app.api.workflow import router as workflow_router
 
 api_router = APIRouter()
+api_router.include_router(assistant_router)
 api_router.include_router(admin_router)
 api_router.include_router(audit_router)
 api_router.include_router(auth_router)

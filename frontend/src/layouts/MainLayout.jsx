@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, HelpCircle, Menu, Settings, UserCircle } fro
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { AppLogo } from '../components/AppLogo.jsx';
+import { FaqChatWidget } from '../components/FaqChatWidget.jsx';
 import { NotificationBell } from '../components/NotificationCenter.jsx';
 import { QuickCreateMenu } from '../components/QuickCreateMenu.jsx';
 import { RecentHistoryMenu } from '../components/RecentHistoryMenu.jsx';
@@ -86,16 +87,6 @@ export function MainLayout() {
           <QuickCreateMenu role={user?.role} />
           <RecentHistoryMenu history={history} />
           {!isSuperAdmin ? <NotificationBell /> : null}
-          <Button
-            aria-label={isSuperAdmin ? 'Open platform health' : 'Open reports help'}
-            className="topbar-icon-btn topbar-icon-btn-quiet"
-            onClick={() => navigate(isSuperAdmin ? '/admin/platform-health' : '/reports')}
-            title={isSuperAdmin ? 'Open platform health' : 'Open reports'}
-            type="button"
-            variant="ghost"
-          >
-            <HelpCircle size={18} />
-          </Button>
           <div className="topbar-popover-anchor" ref={accountRef}>
             <button className="workspace-chip" onClick={() => setIsAccountOpen((currentState) => !currentState)} type="button">
               <UserCircle size={20} />
@@ -215,6 +206,7 @@ export function MainLayout() {
         onCancel={() => setIsSignOutConfirmOpen(false)}
         onConfirm={confirmSignOut}
       />
+      {!isSuperAdmin ? <FaqChatWidget /> : null}
     </div>
     </TenantSettingsProvider>
   );

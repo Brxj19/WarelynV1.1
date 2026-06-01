@@ -16,6 +16,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.limiter import limiter
 from app.core.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.db.session import SessionLocal
+from app.services.assistant import AssistantService
 from app.services.auth import AuthService
 
 
@@ -39,6 +40,14 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         except SQLAlchemyError:
             db.rollback()
             raise
+        finally:
+            db.close()
+    if settings.gemini_api_key:
+        db = SessionLocal()
+        try:
+            AssistantService(db).ensure_bootstrap_index()
+        except Exception:
+            db.rollback()
         finally:
             db.close()
     yield
