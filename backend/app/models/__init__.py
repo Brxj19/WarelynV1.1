@@ -1,4 +1,14 @@
 from app.models.audit import AuditLog
+from app.models.assistant import (
+    AssistantFeedback,
+    AssistantFeedbackValue,
+    AssistantMessage,
+    AssistantMessageRole,
+    AssistantSession,
+    FAQChunk,
+    FAQDocument,
+    KnowledgeSourceType,
+)
 from app.models.auth import RefreshToken, Tenant, TenantStatus, User, UserRole, UserStatus
 from app.models.communication import Notification, NotificationCategory, NotificationType, OTPPurpose, OTPSource, OTPVerification, SMSOutbox, SMSOutboxStatus
 from app.models.documents import (
@@ -27,6 +37,13 @@ from app.models.workflow import WorkflowEvent, WorkflowTask, WorkflowTaskPriorit
 
 __all__ = [
     "AuditLog",
+    "AssistantFeedback",
+    "AssistantFeedbackValue",
+    "AssistantMessage",
+    "AssistantMessageRole",
+    "AssistantSession",
+    "FAQChunk",
+    "FAQDocument",
     "Bill",
     "BillItem",
     "BillStatus",
@@ -60,6 +77,7 @@ __all__ = [
     "InventorySerial",
     "InventorySerialStatus",
     "LocationType",
+    "KnowledgeSourceType",
     "MovementType",
     "NumberSequence",
     "NumberSequenceKey",

@@ -12,6 +12,7 @@ const AuthLayout = lazy(() => import('../layouts/AuthLayout.jsx').then(m => ({ d
 const MainLayout = lazy(() => import('../layouts/MainLayout.jsx').then(m => ({ default: m.MainLayout })));
 
 const AdminDashboardPage = lazy(() => import('../pages/AdminDashboardPage.jsx').then(m => ({ default: m.AdminDashboardPage })));
+const AdminAICopilotPage = lazy(() => import('../pages/AdminAICopilotPage.jsx').then(m => ({ default: m.AdminAICopilotPage })));
 const AuditLogsPage = lazy(() => import('../pages/AuditLogsPage.jsx').then(m => ({ default: m.AuditLogsPage })));
 const CatalogPage = lazy(() => import('../pages/CatalogPage.jsx').then(m => ({ default: m.CatalogPage })));
 const BatchExpiryReportPage = lazy(() => import('../pages/BatchExpiryReportPage.jsx').then(m => ({ default: m.BatchExpiryReportPage })));
@@ -19,6 +20,7 @@ const BlockedStockReportPage = lazy(() => import('../pages/BlockedStockReportPag
 const CatalogMasterPages = lazy(() => import('../pages/CatalogMasterPages.jsx'));
 const DashboardPage = lazy(() => import('../pages/DashboardPage.jsx').then(m => ({ default: m.DashboardPage })));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage.jsx').then(m => ({ default: m.ForgotPasswordPage })));
+const FAQPage = lazy(() => import('../pages/FAQPage.jsx').then(m => ({ default: m.FAQPage })));
 const MyTasksPage = lazy(() => import('../pages/MyTasksPage.jsx').then(m => ({ default: m.MyTasksPage })));
 const DocumentsPages = lazy(() => import('../pages/DocumentsPages.jsx'));
 const EmailTemplatesPage = lazy(() => import('../pages/EmailTemplatesPage.jsx').then(m => ({ default: m.EmailTemplatesPage })));
@@ -104,6 +106,8 @@ export function AppRoutes() {
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="faq" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF', 'VIEWER']}><FAQPage /></RoleGuard>} />
+            <Route path="assistant-copilot" element={<RoleGuard allowedRoles={['TENANT_ADMIN']}><AdminAICopilotPage /></RoleGuard>} />
             <Route path="my-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF']}><MyTasksPage /></RoleGuard>} />
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="catalog/products" element={<LazyProductsPage />} />
