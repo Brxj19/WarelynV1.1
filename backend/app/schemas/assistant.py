@@ -64,6 +64,7 @@ class AssistantMessageRead(BaseModel):
     citations_json: list[dict] | None = None
     suggested_actions_json: list[dict] | None = None
     usage_json: dict | None = None
+    metadata_json: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -83,6 +84,9 @@ class CopilotReportData(BaseModel):
     total_rows: int
     insights: list[str]
     action_url: str
+    query_summary: str | None = None
+    workflow_type: str | None = None
+    workflow_name: str | None = None
 
 
 class AssistantAskResponse(BaseModel):

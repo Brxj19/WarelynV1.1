@@ -45,7 +45,15 @@ export function FaqChatWidget() {
   const [question, setQuestion] = useState('');
   const [asking, setAsking] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
-  const [messages, setMessages] = useState([]);
+  const storageKey = `warelyn-faq-chat-${user?.id ?? 'anon'}`;
+  const [messages, setMessages] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
   const widgetBottomRef = useRef(null);
   const panelRef = useRef(null);
   const dragRef = useRef(null);
@@ -61,6 +69,23 @@ export function FaqChatWidget() {
   const resizeStart = useRef({ x: 0, y: 0, size: { width: 352, height: 460 } });
 
   const canUseFaq = useMemo(() => allowedRoles.has(user?.role), [user?.role]);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      setMessages(stored ? JSON.parse(stored) : []);
+    } catch {
+      setMessages([]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // Storage can be unavailable in private browsing; chat still works in memory.
+    }
+  }, [messages, storageKey]);
 
   useEffect(() => {
     if (!open || !canUseFaq || suggestions.length > 0) return;
@@ -171,6 +196,19 @@ export function FaqChatWidget() {
               FAQ Assistant
             </div>
             <div className="flex items-center gap-0.5">
+              {messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMessages([]);
+                    sessionStorage.removeItem(storageKey);
+                  }}
+                  className="rounded-md px-1.5 py-1 text-[10px] text-warelyn-muted transition hover:bg-slate-100 hover:text-warelyn-text"
+                  title="Clear chat history"
+                >
+                  Clear
+                </button>
+              )}
               <button
                 type="button"
                 className="rounded-md p-1 text-warelyn-muted transition hover:bg-slate-100 hover:text-warelyn-text"

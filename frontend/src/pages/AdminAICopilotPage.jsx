@@ -9,6 +9,14 @@ import * as assistantService from '../services/assistantService.js';
 
 const LS_KEY = 'warelyn_copilot_active_session_id';
 
+function hydrateMessages(rows = []) {
+  return rows.map((message) => ({
+    ...message,
+    _report_data: message._report_data || message.metadata_json?.report_data || null,
+    _is_off_topic: message._is_off_topic || message.metadata_json?.is_off_topic || false,
+  }));
+}
+
 function samplePrompts() {
   return [
     'Show warehouse stock report',
@@ -55,7 +63,7 @@ export function AdminAICopilotPage() {
     try {
       const detail = await assistantService.getAssistantSession(accessToken, sessionId);
       setSession(detail.session);
-      setMessages(detail.messages);
+      setMessages(hydrateMessages(detail.messages));
       localStorage.setItem(LS_KEY, String(sessionId));
     } catch (e) {
       setError(e.message);
@@ -77,13 +85,13 @@ export function AdminAICopilotPage() {
       if (savedSession) {
         const detail = await assistantService.getAssistantSession(accessToken, savedSession.id);
         setSession(detail.session);
-        setMessages(detail.messages);
+        setMessages(hydrateMessages(detail.messages));
       } else {
         const created = await assistantService.createAssistantSession(accessToken, `Session ${new Date().toLocaleString()}`);
         setSessions((prev) => [created, ...prev]);
         const detail = await assistantService.getAssistantSession(accessToken, created.id);
         setSession(detail.session);
-        setMessages(detail.messages);
+        setMessages(hydrateMessages(detail.messages));
         localStorage.setItem(LS_KEY, String(created.id));
       }
 
@@ -297,7 +305,9 @@ export function AdminAICopilotPage() {
                       </div>
                       <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-gray-50 border border-warelyn-border px-4 py-3 space-y-2">
                         <p className="text-sm text-warelyn-text leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                        {message._report_data && <CopilotReportBlock data={message._report_data} />}
+                        {(message._report_data || message.metadata_json?.report_data) && (
+                          <CopilotReportBlock data={message._report_data || message.metadata_json?.report_data} />
+                        )}
                         {message.citations_json?.length > 0 && (
                           <div className="flex flex-wrap gap-1 pt-1">
                             {message.citations_json.slice(0, 4).map((c, i) => (

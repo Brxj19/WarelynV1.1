@@ -208,3 +208,5 @@ Full hardening validation (when Docker and DB are available):
 ```bash
 ./scripts/validate.sh
 ```
+
+| `graphify` | `/graphify .` | Run when generating architecture diagrams, workflow charts, or DB schema visuals for the codebase. |

@@ -43,3 +43,5 @@ login-page.txt
 copilot_ui_plan.html
 
 .gitignore
+
+graphify-out/

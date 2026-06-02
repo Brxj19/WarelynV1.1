@@ -9,7 +9,12 @@ export function CopilotReportBlock({ data }) {
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-warelyn-border bg-white">
       <div className="flex items-center justify-between border-b border-warelyn-border bg-gray-50 px-3 py-2">
-        <span className="text-xs font-semibold text-warelyn-text">{data.title}</span>
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold text-warelyn-text">{data.title}</span>
+          {data.query_summary ? (
+            <span className="text-[10px] font-medium text-warelyn-muted">{data.query_summary}</span>
+          ) : null}
+        </div>
         {data.action_url && (
           <Link
             to={data.action_url}

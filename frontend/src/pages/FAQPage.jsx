@@ -20,11 +20,25 @@ function confidenceTone(confidence) {
 }
 
 export function FAQPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const toast = useToast();
+  const storageKey = `warelyn-faq-page-${user?.id ?? 'anon'}`;
   const [suggestions, setSuggestions] = useState([]);
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState(null);
+  const [question, setQuestion] = useState(() => {
+    try {
+      return sessionStorage.getItem(`${storageKey}-q`) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const [answer, setAnswer] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem(`${storageKey}-answer`);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState('');
@@ -35,6 +49,38 @@ export function FAQPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [accessToken]);
+
+  useEffect(() => {
+    try {
+      const storedQuestion = sessionStorage.getItem(`${storageKey}-q`);
+      const storedAnswer = sessionStorage.getItem(`${storageKey}-answer`);
+      setQuestion(storedQuestion ?? '');
+      setAnswer(storedAnswer ? JSON.parse(storedAnswer) : null);
+    } catch {
+      setQuestion('');
+      setAnswer(null);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(`${storageKey}-q`, question);
+    } catch {
+      // Session storage is a convenience only.
+    }
+  }, [question, storageKey]);
+
+  useEffect(() => {
+    try {
+      if (answer) {
+        sessionStorage.setItem(`${storageKey}-answer`, JSON.stringify(answer));
+      } else {
+        sessionStorage.removeItem(`${storageKey}-answer`);
+      }
+    } catch {
+      // Session storage is a convenience only.
+    }
+  }, [answer, storageKey]);
 
   async function handleAsk(nextQuestion) {
     const value = (nextQuestion ?? question).trim();

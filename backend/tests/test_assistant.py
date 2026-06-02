@@ -1,3 +1,4 @@
+from datetime import date, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -5,12 +6,152 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash
-from app.models.assistant import AssistantFeedbackValue, AssistantMessage, AssistantMessageRole, FAQChunk, FAQDocument, KnowledgeSourceType
+from app.models.assistant import AssistantFeedbackValue, AssistantMessageRole, FAQChunk, FAQDocument, KnowledgeSourceType
 from app.models.audit import AuditLog
 from app.models.auth import Tenant, TenantStatus, User, UserRole, UserStatus
 from app.models.inventory import WarehouseStock
 from app.models.master_data import Product, RecordStatus, Warehouse, WarehouseLocation
 from app.services.assistant import AssistantService
+
+
+class _FakeAssistantMongoRepository:
+    def __init__(self) -> None:
+        self.next_id = 1
+        self.sessions: dict[int, dict] = {}
+        self.messages: dict[int, dict] = {}
+        self.feedback: dict[int, dict] = {}
+
+    def _id(self) -> int:
+        value = self.next_id
+        self.next_id += 1
+        return value
+
+    def _now(self):
+        from datetime import datetime
+
+        return datetime.now(timezone.utc)
+
+    def create_session(self, *, tenant_id: int, user_id: int, title: str) -> dict:
+        session_id = self._id()
+        session = {
+            "id": session_id,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "title": title,
+            "metadata_json": None,
+            "created_at": self._now(),
+            "updated_at": self._now(),
+        }
+        self.sessions[session_id] = session
+        return session
+
+    def get_session(self, *, tenant_id: int, session_id: int) -> dict | None:
+        session = self.sessions.get(session_id)
+        if not session or session["tenant_id"] != tenant_id:
+            return None
+        return session
+
+    def update_session_title(self, session_id: int, title: str) -> None:
+        if session_id in self.sessions:
+            self.sessions[session_id]["title"] = title
+
+    def update_session_timestamp(self, session_id: int) -> None:
+        if session_id in self.sessions:
+            self.sessions[session_id]["updated_at"] = self._now()
+
+    def list_sessions_for_user(self, *, tenant_id: int, user_id: int) -> list[dict]:
+        return [
+            session for session in self.sessions.values()
+            if session["tenant_id"] == tenant_id and session["user_id"] == user_id
+        ]
+
+    def create_message(
+        self,
+        *,
+        tenant_id: int,
+        session_id: int,
+        user_id: int | None,
+        role: str,
+        content: str,
+        confidence_score: float | None = None,
+        citations_json: list[dict] | None = None,
+        suggested_actions_json: list[dict] | None = None,
+        usage_json: dict | None = None,
+        metadata_json: dict | None = None,
+    ) -> dict:
+        message_id = self._id()
+        message = {
+            "id": message_id,
+            "tenant_id": tenant_id,
+            "session_id": session_id,
+            "user_id": user_id,
+            "role": role,
+            "content": content,
+            "confidence_score": confidence_score,
+            "citations_json": citations_json,
+            "suggested_actions_json": suggested_actions_json,
+            "usage_json": usage_json,
+            "metadata_json": metadata_json,
+            "created_at": self._now(),
+        }
+        self.messages[message_id] = message
+        return message
+
+    def list_messages(self, *, tenant_id: int, session_id: int) -> list[dict]:
+        return [
+            message for message in self.messages.values()
+            if message["tenant_id"] == tenant_id and message["session_id"] == session_id
+        ]
+
+    def count_messages(self, *, tenant_id: int, session_id: int) -> int:
+        return len(self.list_messages(tenant_id=tenant_id, session_id=session_id))
+
+    def get_message(self, *, tenant_id: int, message_id: int) -> dict | None:
+        message = self.messages.get(message_id)
+        if not message or message["tenant_id"] != tenant_id:
+            return None
+        return message
+
+    def upsert_feedback(
+        self,
+        *,
+        tenant_id: int,
+        message_id: int,
+        user_id: int,
+        value: str,
+        note: str | None,
+    ) -> dict:
+        feedback = {
+            "id": self._id(),
+            "tenant_id": tenant_id,
+            "message_id": message_id,
+            "user_id": user_id,
+            "value": value,
+            "note": note,
+            "created_at": self._now(),
+        }
+        self.feedback[message_id] = feedback
+        return feedback
+
+    def get_telemetry(self, *, tenant_id: int) -> dict:
+        assistant_messages = [
+            message for message in self.messages.values()
+            if message["tenant_id"] == tenant_id and message["role"] == AssistantMessageRole.ASSISTANT.value
+        ]
+        total_tokens = sum(int((message.get("usage_json") or {}).get("total_tokens", 0)) for message in assistant_messages)
+        return {
+            "total_requests": len(assistant_messages),
+            "avg_latency_ms": 0.0,
+            "total_tokens": total_tokens,
+            "abstain_rate_pct": 0.0,
+            "citation_rate_pct": 100.0 if assistant_messages else 0.0,
+        }
+
+
+def _assistant_service(db: Session) -> AssistantService:
+    service = AssistantService(db)
+    service.mongo_repo = _FakeAssistantMongoRepository()
+    return service
 
 
 def _create_tenant(db: Session, *, company: str, email: str) -> Tenant:
@@ -116,6 +257,37 @@ def test_keyword_search_tokenizes_question_terms(db_session: Session):
     assert rows
     joined = " ".join(row.searchable_text for row in rows)
     assert "reconciliation" in joined or "mismatch" in joined
+
+
+def test_parse_query_params_extracts_top_low_stock(db_session: Session):
+    params = _assistant_service(db_session)._parse_query_params(
+        "show me top 5 low stock products",
+        tenant_id=1,
+    )
+
+    assert params.limit == 5
+    assert params.low_stock_only is True
+    assert params.sort_dir == "desc"
+
+
+def test_parse_query_params_extracts_limit_and_threshold(db_session: Session):
+    params = _assistant_service(db_session)._parse_query_params(
+        "give me 3 items below 10 units",
+        tenant_id=1,
+    )
+
+    assert params.limit == 3
+    assert params.max_available == 10.0
+
+
+def test_parse_query_params_extracts_week_range(db_session: Session):
+    params = _assistant_service(db_session)._parse_query_params(
+        "show stock movements this week",
+        tenant_id=1,
+    )
+
+    assert params.date_from == date.today() - timedelta(days=7)
+    assert params.date_to == date.today()
 
 
 def test_lexical_score_rewards_relevant_terms(db_session: Session):
@@ -258,7 +430,7 @@ def test_session_message_feedback_lifecycle_with_audit(db_session: Session, monk
     )
     db_session.commit()
 
-    service = AssistantService(db_session)
+    service = _assistant_service(db_session)
     session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Daily Ops")
 
     monkeypatch.setattr(
@@ -284,10 +456,10 @@ def test_session_message_feedback_lifecycle_with_audit(db_session: Session, monk
         tenant_id=tenant.id,
         user_id=admin.id,
         role=UserRole.TENANT_ADMIN,
-        session_id=session.id,
+        session_id=session["id"],
         question="What should I do first today?",
     )
-    assert ask_result["message"].role == AssistantMessageRole.ASSISTANT
+    assert ask_result["message"]["role"] == AssistantMessageRole.ASSISTANT.value
     assert ask_result["confidence"] == "HIGH"
     assert ask_result["citations"]
     assert ask_result["suggested_actions"]
@@ -295,15 +467,15 @@ def test_session_message_feedback_lifecycle_with_audit(db_session: Session, monk
     feedback = service.add_feedback(
         tenant_id=tenant.id,
         user_id=admin.id,
-        message_id=ask_result["message"].id,
+        message_id=ask_result["message"]["id"],
         value=AssistantFeedbackValue.UP.value,
         note="Useful and grounded",
     )
-    assert feedback.value == AssistantFeedbackValue.UP
+    assert feedback["value"] == AssistantFeedbackValue.UP.value
 
-    detail = service.get_session_detail(tenant_id=tenant.id, user_id=admin.id, session_id=session.id)
+    detail = service.get_session_detail(tenant_id=tenant.id, user_id=admin.id, session_id=session["id"])
     assert len(detail["messages"]) == 2
-    assert detail["messages"][-1].content.startswith("Prioritize OPEN tasks")
+    assert detail["messages"][-1]["content"].startswith("Prioritize OPEN tasks")
 
     telemetry = service.telemetry(tenant_id=tenant.id)
     assert telemetry["total_requests"] >= 1
@@ -319,12 +491,10 @@ def test_session_message_feedback_lifecycle_with_audit(db_session: Session, monk
     assert "ASSISTANT_COPILOT_ASK" in audit_actions
     assert "ASSISTANT_FEEDBACK" in audit_actions
 
-    stored_assistant_messages = list(
-        db_session.scalars(
-            select(AssistantMessage).where(AssistantMessage.tenant_id == tenant.id, AssistantMessage.session_id == session.id)
-        )
+    assert any(
+        message["role"] == AssistantMessageRole.ASSISTANT.value
+        for message in service.mongo_repo.messages.values()
     )
-    assert any(message.role == AssistantMessageRole.ASSISTANT for message in stored_assistant_messages)
 
 
 def test_ask_session_returns_low_stock_report_data(db_session: Session, monkeypatch):
@@ -380,7 +550,7 @@ def test_ask_session_returns_low_stock_report_data(db_session: Session, monkeypa
     )
     db_session.commit()
 
-    service = AssistantService(db_session)
+    service = _assistant_service(db_session)
     session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Report Data")
     monkeypatch.setattr(
         service,
@@ -406,13 +576,208 @@ def test_ask_session_returns_low_stock_report_data(db_session: Session, monkeypa
         tenant_id=tenant.id,
         user_id=admin.id,
         role=UserRole.TENANT_ADMIN,
-        session_id=session.id,
-        question="show low stock",
+        session_id=session["id"],
+        question="show top 5 low stock",
     )
 
     assert result["report_data"]["report_type"] == "low_stock"
     assert isinstance(result["report_data"]["rows"], list)
+    assert len(result["report_data"]["rows"]) <= 5
     assert result["report_data"]["rows"][0]["product"] == "Blue Widget"
+
+
+def test_ask_session_returns_workflow_draft(db_session: Session, monkeypatch):
+    tenant = _create_tenant(db_session, company="Workflow Co", email="workflow@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="workflow-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    chunk = _create_doc_chunk(
+        db_session,
+        tenant_id=None,
+        slug="sales-workflow-draft",
+        text="Sales order workflow includes confirmation, picking, packing, fulfillment, and invoicing.",
+    )
+    db_session.commit()
+
+    service = _assistant_service(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Workflow Draft")
+    monkeypatch.setattr(
+        service,
+        "_retrieve_chunks",
+        lambda tenant_id, question: [{"chunk": chunk, "score": 0.9}],
+    )
+    monkeypatch.setattr(
+        service,
+        "_grounded_answer",
+        lambda **kwargs: (
+            {
+                "answer": "Here is the draft sales order workflow.",
+                "confidence": "HIGH",
+                "confidence_score": 0.9,
+                "suggested_actions": [{"label": "Open My Tasks", "to": "/my-tasks"}],
+                "is_off_topic": False,
+            },
+            {"total_tokens": 12},
+        ),
+    )
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session["id"],
+        question="draft a sales order workflow",
+    )
+
+    assert result["report_data"]["workflow_type"] == "draft"
+    assert result["report_data"]["workflow_name"] == "Sales Order"
+    assert len(result["report_data"]["rows"]) == 6
+
+
+def test_ask_session_returns_purchase_order_detail_draft(db_session: Session):
+    tenant = _create_tenant(db_session, company="PO Draft Co", email="po-draft@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="po-draft-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    db_session.commit()
+
+    service = _assistant_service(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="PO Draft")
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session["id"],
+        question=(
+            "Draft a purchase order workflow for 50 units of Caffeine Body Scrub from Vendor #1. "
+            "Use these field details: - Product: Caffeine Body Scrub - SKU: MCA-BC-001 "
+            "- Quantity: 50 - Vendor: Vendor #1 - Warehouse: Main Warehouse "
+            "- Expected delivery date: 2026-06-15 - Unit cost: 120.00 "
+            "- Notes: Reorder because current available stock is below reorder level."
+        ),
+    )
+
+    assert result["confidence"] == "HIGH"
+    assert result["report_data"]["report_type"] == "purchase_order_draft"
+    assert result["report_data"]["workflow_name"] == "Purchase Order"
+    row_values = {row["field"]: row["draft_value"] for row in result["report_data"]["rows"]}
+    assert row_values["Product"] == "Caffeine Body Scrub"
+    assert row_values["SKU"] == "MCA-BC-001"
+    assert row_values["Quantity"] == "50"
+    assert row_values["Vendor"] == "Vendor #1"
+    assert row_values["Warehouse"] == "Main Warehouse"
+    assert row_values["Expected delivery date"] == "2026-06-15"
+    assert service.mongo_repo.messages[result["message"]["id"]]["metadata_json"]["report_data"]["report_type"] == "purchase_order_draft"
+
+
+def test_ask_session_returns_sales_order_detail_draft(db_session: Session):
+    tenant = _create_tenant(db_session, company="SO Draft Co", email="so-draft@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="so-draft-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    db_session.commit()
+
+    service = _assistant_service(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="SO Draft")
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session["id"],
+        question=(
+            "Draft a sales order for 12 units of Caffeine Body Scrub for customer Glow Retail. "
+            "Use these field details: - Customer: Glow Retail - Product: Caffeine Body Scrub "
+            "- SKU: MCA-BC-001 - Quantity: 12 - Warehouse: Main Warehouse "
+            "- Expected ship date: 2026-06-18 - Unit price: 180.00 - Notes: Priority customer order."
+        ),
+    )
+
+    assert result["report_data"]["report_type"] == "sales_order_draft"
+    assert result["report_data"]["action_url"] == "/sales/new"
+    row_values = {row["field"]: row["draft_value"] for row in result["report_data"]["rows"]}
+    assert row_values["Customer"] == "Glow Retail"
+    assert row_values["Product"] == "Caffeine Body Scrub"
+    assert row_values["Quantity"] == "12"
+    assert row_values["Expected ship date"] == "2026-06-18"
+
+
+def test_ask_session_returns_sales_return_detail_draft(db_session: Session):
+    tenant = _create_tenant(db_session, company="Return Draft Co", email="return-draft@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="return-draft-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    db_session.commit()
+
+    service = _assistant_service(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Return Draft")
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session["id"],
+        question=(
+            "Draft a sales return for sales order SO-1001. Use these field details: "
+            "- Sales order: SO-1001 - Return number: RET-1001 - Customer: Glow Retail "
+            "- Product: Caffeine Body Scrub - SKU: MCA-BC-001 - Returned quantity: 2 "
+            "- Warehouse: Main Warehouse - Location: QC-01 - Reason: Damaged on arrival."
+        ),
+    )
+
+    assert result["report_data"]["report_type"] == "sales_return_draft"
+    assert result["report_data"]["action_url"] == "/returns/new"
+    row_values = {row["field"]: row["draft_value"] for row in result["report_data"]["rows"]}
+    assert row_values["Sales order"] == "SO-1001"
+    assert row_values["Returned quantity"] == "2"
+    assert row_values["Reason"] == "Damaged on arrival"
+
+
+def test_ask_session_returns_cycle_count_detail_draft(db_session: Session):
+    tenant = _create_tenant(db_session, company="Count Draft Co", email="count-draft@example.com")
+    admin = _create_user(
+        db_session,
+        tenant_id=tenant.id,
+        email="count-draft-admin@example.com",
+        role=UserRole.TENANT_ADMIN,
+    )
+    db_session.commit()
+
+    service = _assistant_service(db_session)
+    session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Cycle Count Draft")
+
+    result = service.ask_session(
+        tenant_id=tenant.id,
+        user_id=admin.id,
+        role=UserRole.TENANT_ADMIN,
+        session_id=session["id"],
+        question=(
+            "Draft a cycle count for Main Warehouse. Use these field details: "
+            "- Session name: June audit count - Warehouse: Main Warehouse - Location: A1 "
+            "- Products: Caffeine Body Scrub, Rose Toner - Scheduled date: 2026-06-20 "
+            "- Reason: Reconciliation mismatch review."
+        ),
+    )
+
+    assert result["report_data"]["report_type"] == "cycle_count_draft"
+    assert result["report_data"]["action_url"] == "/cycle-counts/new"
+    row_values = {row["field"]: row["draft_value"] for row in result["report_data"]["rows"]}
+    assert row_values["Session name"] == "June audit count"
+    assert row_values["Warehouse"] == "Main Warehouse"
+    assert row_values["Products"] == "Caffeine Body Scrub, Rose Toner"
 
 
 def test_ask_session_blocks_off_topic_question(db_session: Session):
@@ -425,13 +790,13 @@ def test_ask_session_blocks_off_topic_question(db_session: Session):
     )
     db_session.commit()
 
-    service = AssistantService(db_session)
+    service = _assistant_service(db_session)
     session = service.create_session(tenant_id=tenant.id, user_id=admin.id, title="Guardrail")
     result = service.ask_session(
         tenant_id=tenant.id,
         user_id=admin.id,
         role=UserRole.TENANT_ADMIN,
-        session_id=session.id,
+        session_id=session["id"],
         question="what is 2+2",
     )
 
