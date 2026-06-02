@@ -36,3 +36,8 @@ docker-data/
 # IDE
 .idea/
 .vscode/
+.playwright-mcp/
+
+login-page.txt
+
+copilot_ui_plan.html
