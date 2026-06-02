@@ -1,7 +1,7 @@
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.assistant import AssistantFeedback, AssistantMessage, AssistantSession, FAQChunk, FAQDocument, KnowledgeSourceType
+from app.models.assistant import FAQChunk, FAQDocument, KnowledgeSourceType
 
 STOP_WORDS = frozenset({
     "how", "do", "i", "a", "an", "the", "is", "are", "what", "why", "when", "where",
@@ -125,98 +125,4 @@ class AssistantRepository:
             )
         )
 
-    def create_session(self, *, tenant_id: int, user_id: int, title: str) -> AssistantSession:
-        session = AssistantSession(tenant_id=tenant_id, user_id=user_id, title=title)
-        self.db.add(session)
-        self.db.flush()
-        return session
 
-    def get_session(self, *, tenant_id: int, session_id: int) -> AssistantSession | None:
-        return self.db.scalar(
-            select(AssistantSession).where(AssistantSession.id == session_id, AssistantSession.tenant_id == tenant_id)
-        )
-
-    def list_sessions_for_user(self, *, tenant_id: int, user_id: int) -> list[AssistantSession]:
-        return list(
-            self.db.scalars(
-                select(AssistantSession)
-                .where(AssistantSession.tenant_id == tenant_id, AssistantSession.user_id == user_id)
-                .order_by(AssistantSession.updated_at.desc(), AssistantSession.id.desc())
-            )
-        )
-
-    def create_message(
-        self,
-        *,
-        tenant_id: int,
-        session_id: int,
-        user_id: int | None,
-        role: str,
-        content: str,
-        confidence_score: float | None = None,
-        citations_json: list[dict] | None = None,
-        suggested_actions_json: list[dict] | None = None,
-        usage_json: dict | None = None,
-        metadata_json: dict | None = None,
-    ) -> AssistantMessage:
-        message = AssistantMessage(
-            tenant_id=tenant_id,
-            session_id=session_id,
-            user_id=user_id,
-            role=role,
-            content=content,
-            confidence_score=confidence_score,
-            citations_json=citations_json,
-            suggested_actions_json=suggested_actions_json,
-            usage_json=usage_json,
-            metadata_json=metadata_json,
-        )
-        self.db.add(message)
-        self.db.flush()
-        return message
-
-    def list_messages(self, *, tenant_id: int, session_id: int) -> list[AssistantMessage]:
-        return list(
-            self.db.scalars(
-                select(AssistantMessage)
-                .where(AssistantMessage.tenant_id == tenant_id, AssistantMessage.session_id == session_id)
-                .order_by(AssistantMessage.created_at.asc(), AssistantMessage.id.asc())
-            )
-        )
-
-    def get_message(self, *, tenant_id: int, message_id: int) -> AssistantMessage | None:
-        return self.db.scalar(
-            select(AssistantMessage).where(AssistantMessage.id == message_id, AssistantMessage.tenant_id == tenant_id)
-        )
-
-    def upsert_feedback(
-        self,
-        *,
-        tenant_id: int,
-        message_id: int,
-        user_id: int,
-        value: str,
-        note: str | None,
-    ) -> AssistantFeedback:
-        feedback = self.db.scalar(
-            select(AssistantFeedback).where(
-                AssistantFeedback.tenant_id == tenant_id,
-                AssistantFeedback.message_id == message_id,
-                AssistantFeedback.user_id == user_id,
-            )
-        )
-        if feedback is None:
-            feedback = AssistantFeedback(
-                tenant_id=tenant_id,
-                message_id=message_id,
-                user_id=user_id,
-                value=value,
-                note=note,
-            )
-            self.db.add(feedback)
-            self.db.flush()
-        else:
-            feedback.value = value
-            feedback.note = note
-            self.db.flush()
-        return feedback

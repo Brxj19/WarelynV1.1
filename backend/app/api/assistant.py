@@ -76,6 +76,18 @@ def ask_faq(
     )
 
 
+@router.get("/assistant/sessions", response_model=list[AssistantSessionRead])
+def list_sessions(
+    context: UserContext = Depends(require_roles(*copilot_roles)),
+    db: Session = Depends(get_db),
+) -> list[AssistantSessionRead]:
+    sessions = AssistantService(db).list_sessions(
+        tenant_id=context.tenant_id,
+        user_id=context.user.id,
+    )
+    return [AssistantSessionRead.model_validate(s) for s in sessions]
+
+
 @router.post("/assistant/sessions", response_model=AssistantSessionRead)
 def create_session(
     payload: AssistantSessionCreateRequest,
@@ -148,6 +160,19 @@ def feedback(
         note=payload.note,
     )
     return AssistantFeedbackRead.model_validate(feedback_row)
+
+
+@router.delete("/assistant/sessions/{session_id}", status_code=204)
+def delete_session(
+    session_id: int,
+    context: UserContext = Depends(require_roles(*copilot_roles)),
+    db: Session = Depends(get_db),
+) -> None:
+    AssistantService(db).delete_session(
+        tenant_id=context.tenant_id,
+        user_id=context.user.id,
+        session_id=session_id,
+    )
 
 
 @router.get("/assistant/telemetry", response_model=AssistantTelemetryRead)

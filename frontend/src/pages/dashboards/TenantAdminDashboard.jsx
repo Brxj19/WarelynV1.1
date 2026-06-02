@@ -1,7 +1,13 @@
-import { AlertTriangle, Boxes, PackageSearch, ShieldAlert } from 'lucide-react';
+import {
+  AlertTriangle, Banknote, Boxes, PackageSearch, Percent, ShieldAlert,
+  ShoppingCart, TrendingDown, TrendingUp,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Link } from 'react-router-dom';
+import {
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
 
 import { AlertBanner } from '../../components/dashboard/AlertBanner.jsx';
 import { ChartFilterBar } from '../../components/dashboard/ChartFilterBar.jsx';
@@ -16,14 +22,15 @@ import { PaginationControls } from '../../components/ui/PaginationControls.jsx';
 import { StatusBadge } from '../../components/ui/Badge.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { emptyStateIllustrations } from '../../lib/emptyStates.js';
+import * as dashboardService from '../../services/dashboardService.js';
 import * as purchasingService from '../../services/purchasingService.js';
 import * as reportsService from '../../services/reportsService.js';
 import * as salesService from '../../services/salesService.js';
 import * as workflowService from '../../services/workflowService.js';
-import { formatDateTime, formatNumber } from '../../utils/formatters.js';
+import { formatDateTime, formatMoney, formatNumber } from '../../utils/formatters.js';
 
 const TOOLTIP_STYLE = { borderRadius: '0.5rem', border: '1px solid #e5e7eb', fontSize: '0.8rem' };
-const ROLE_COLORS = ['#1e3a5f', '#10b981', '#6366f1', '#f59e0b', '#8b5cf6'];
+const COLORS = ['#1e3a5f', '#10b981', '#6366f1', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6'];
 const SALES_OPEN_STATUSES = new Set(['DRAFT', 'CONFIRMED', 'PARTIALLY_FULFILLED']);
 const PURCHASE_OPEN_STATUSES = new Set(['DRAFT', 'SUBMITTED', 'PARTIALLY_RECEIVED']);
 
@@ -64,10 +71,14 @@ function pendingActionUrl(label) {
 
 export function TenantAdminDashboard() {
   const { accessToken } = useAuth();
-  const navigate = useNavigate();
   const [scope, setScope] = useState('CURRENT');
   const [movementDays, setMovementDays] = useState(30);
+  const [revenueDays, setRevenueDays] = useState(30);
   const [dashboard, setDashboard] = useState(null);
+  const [adminDash, setAdminDash] = useState(null);
+  const [salesDash, setSalesDash] = useState(null);
+  const [purchaseDash, setPurchaseDash] = useState(null);
+  const [inventoryDash, setInventoryDash] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -84,17 +95,25 @@ export function TenantAdminDashboard() {
       setIsLoading(true);
       setError('');
       try {
-        const [dashboardRow, taskRows, salesRows, purchaseRows] = await Promise.all([
+        const [dashboardRow, adminRow, salesRow, purchaseRow, inventoryRow, taskRows, salesOrderRows, purchaseOrderRows] = await Promise.all([
           reportsService.getOperationalDashboard(accessToken),
+          dashboardService.getAdminDashboard(accessToken),
+          dashboardService.getSalesDashboard(accessToken),
+          dashboardService.getPurchaseDashboard(accessToken),
+          dashboardService.getInventoryDashboard(accessToken),
           workflowService.getMyTasks(accessToken, 'OPEN').catch(() => []),
           salesService.listSalesOrders(accessToken),
           purchasingService.listPurchaseOrders(accessToken),
         ]);
         if (!mounted) return;
         setDashboard(dashboardRow);
+        setAdminDash(adminRow);
+        setSalesDash(salesRow);
+        setPurchaseDash(purchaseRow);
+        setInventoryDash(inventoryRow);
         setTasks(taskRows);
-        setSalesOrders(salesRows);
-        setPurchaseOrders(purchaseRows);
+        setSalesOrders(salesOrderRows);
+        setPurchaseOrders(purchaseOrderRows);
       } catch (loadError) {
         if (!mounted) return;
         setError(loadError.message);
@@ -108,10 +127,17 @@ export function TenantAdminDashboard() {
     };
   }, [accessToken]);
 
+  const currency = dashboard?.kpis?.currency_code || 'USD';
+
   const stockMovementRows = useMemo(() => {
     const rows = dashboard?.charts?.stock_movements_by_day || [];
     return rows.slice(-movementDays);
   }, [dashboard, movementDays]);
+
+  const revenueSpendRows = useMemo(() => {
+    const rows = adminDash?.activity_by_day || [];
+    return rows.slice(-revenueDays);
+  }, [adminDash, revenueDays]);
 
   const taskByRole = useMemo(() => {
     const grouped = tasks.reduce((acc, task) => {
@@ -120,6 +146,11 @@ export function TenantAdminDashboard() {
     }, {});
     return Object.entries(grouped).map(([role, count]) => ({ role, count }));
   }, [tasks]);
+
+  const openTasksByRole = useMemo(() => {
+    const data = adminDash?.open_tasks_by_role || {};
+    return Object.entries(data).map(([role, count]) => ({ role, count }));
+  }, [adminDash]);
 
   const recentMovementRows = dashboard?.recent_stock_movements || [];
   const movementTypes = useMemo(() => {
@@ -167,6 +198,21 @@ export function TenantAdminDashboard() {
 
   const salesDelta = useMemo(() => previousWeekDelta(salesOrders, SALES_OPEN_STATUSES), [salesOrders]);
   const purchaseDelta = useMemo(() => previousWeekDelta(purchaseOrders, PURCHASE_OPEN_STATUSES), [purchaseOrders]);
+  const revenueDelta = useMemo(() => {
+    if (!salesDash) return null;
+    return percentageDelta(Number(salesDash.total_revenue_mtd), Number(salesDash.total_revenue_prev_month));
+  }, [salesDash]);
+  const spendDelta = useMemo(() => {
+    if (!purchaseDash) return null;
+    return percentageDelta(Number(purchaseDash.total_spend_mtd), Number(purchaseDash.total_spend_prev_month));
+  }, [purchaseDash]);
+  const grossMarginPct = useMemo(() => {
+    if (!adminDash || !adminDash.revenue_mtd) return null;
+    return (Number(adminDash.gross_margin_mtd) / Number(adminDash.revenue_mtd)) * 100;
+  }, [adminDash]);
+
+  const stockHealthPct = inventoryDash?.stock_health_score ?? 0;
+  const stockHealthTone = stockHealthPct >= 80 ? 'success' : stockHealthPct >= 50 ? 'warning' : 'danger';
 
   const alertItems = useMemo(() => {
     return (dashboard?.insights || []).map((insight) => ({
@@ -204,17 +250,140 @@ export function TenantAdminDashboard() {
           <Boxes size={14} />
           Expiring: {dashboard.expiring_soon_count}
         </Link>
+        {purchaseDash?.pending_bills_count > 0 && (
+          <Link className="inline-flex items-center gap-2 rounded-md bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700" to="/documents?type=bill&status=SENT">
+            <Banknote size={14} />
+            Unpaid bills: {purchaseDash.pending_bills_count}
+          </Link>
+        )}
+        {salesDash?.overdue_invoices_count > 0 && (
+          <Link className="inline-flex items-center gap-2 rounded-md bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700" to="/documents?type=invoice&status=SENT">
+            <Banknote size={14} />
+            Overdue invoices: {salesDash.overdue_invoices_count}
+          </Link>
+        )}
       </div>
 
       <AlertBanner alerts={alertItems} sessionKey="tenant-admin-insights" />
 
+      {/* Financial KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard delta={salesDelta} icon={AlertTriangle} label="Open Sales Orders" to="/sales" tone="primary" value={dashboard.open_sales_orders} />
-        <KpiCard delta={purchaseDelta} icon={AlertTriangle} label="Pending Purchase Orders" to="/purchases" tone="warning" value={dashboard.pending_purchase_orders} />
-        <KpiCard icon={AlertTriangle} label="Active Pick Tasks" to="/pick-tasks" tone="primary" value={dashboard.active_pick_tasks} />
-        <KpiCard icon={AlertTriangle} label="Returns Pending QC" to="/returns/qc" tone="danger" value={dashboard.pending_returns_qc} />
+        <KpiCard
+          delta={revenueDelta}
+          deltaInvert={false}
+          icon={TrendingUp}
+          label="Revenue MTD"
+          to="/reports"
+          tone="success"
+          value={adminDash ? formatMoney(adminDash.revenue_mtd, currency) : '-'}
+        />
+        <KpiCard
+          delta={spendDelta}
+          deltaInvert
+          icon={TrendingDown}
+          label="Spend MTD"
+          to="/reports"
+          tone="danger"
+          value={adminDash ? formatMoney(adminDash.spend_mtd, currency) : '-'}
+        />
+        <KpiCard
+          icon={Percent}
+          label="Gross Margin"
+          to="/reports"
+          tone="primary"
+          value={adminDash ? formatMoney(adminDash.gross_margin_mtd, currency) : '-'}
+          helper={grossMarginPct != null ? `${grossMarginPct.toFixed(1)}% margin` : ''}
+        />
+        <KpiCard
+          icon={ShoppingCart}
+          label="Avg Order Value"
+          to="/sales"
+          tone="primary"
+          value={salesDash ? formatMoney(salesDash.avg_order_value, currency) : '-'}
+        />
       </div>
 
+      {/* Operational KPIs + Inventory Health */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <KpiCard delta={salesDelta} icon={AlertTriangle} label="Open Sales Orders" to="/sales" tone="primary" value={dashboard.open_sales_orders} />
+        <KpiCard delta={purchaseDelta} icon={AlertTriangle} label="Pending POs" to="/purchases" tone="warning" value={dashboard.pending_purchase_orders} />
+        <KpiCard icon={AlertTriangle} label="Active Pick Tasks" to="/pick-tasks" tone="primary" value={dashboard.active_pick_tasks} />
+        <KpiCard icon={AlertTriangle} label="Returns Pending QC" to="/returns/qc" tone="danger" value={dashboard.pending_returns_qc} />
+        <KpiCard
+          icon={Banknote}
+          label="Overdue Invoices"
+          to="/documents?type=invoice&status=SENT"
+          tone={salesDash?.overdue_invoices_count > 0 ? 'danger' : 'success'}
+          value={salesDash?.overdue_invoices_count ?? 0}
+          helper={salesDash?.overdue_invoices_count > 0 ? formatMoney(salesDash.overdue_invoices_value, currency) : ''}
+        />
+        <KpiCard
+          icon={Banknote}
+          label="Overdue Bills"
+          to="/documents?type=bill&status=SENT"
+          tone={purchaseDash?.overdue_bills_count > 0 ? 'danger' : 'success'}
+          value={purchaseDash?.overdue_bills_count ?? 0}
+          helper={purchaseDash?.overdue_bills_count > 0 ? formatMoney(purchaseDash.overdue_bills_value, currency) : ''}
+        />
+      </div>
+
+      {/* Inventory Health KPIs */}
+      {inventoryDash && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard
+            icon={Percent}
+            label="Stock Health Score"
+            to="/reports/inventory-summary"
+            tone={stockHealthTone}
+            value={`${stockHealthPct}%`}
+          />
+          <KpiCard
+            icon={PackageSearch}
+            label="Low Stock SKUs"
+            to="/reports/low-stock"
+            tone={inventoryDash.low_stock_count > 0 ? 'warning' : 'success'}
+            value={inventoryDash.low_stock_count}
+          />
+          <KpiCard
+            icon={ShieldAlert}
+            label="Blocked Stock"
+            to="/reports/blocked-stock"
+            tone={inventoryDash.blocked_stock_count > 0 ? 'danger' : 'success'}
+            value={inventoryDash.blocked_stock_count}
+          />
+          <KpiCard
+            icon={Boxes}
+            label="Expiring (30d)"
+            to="/reports/batch-expiry"
+            tone={inventoryDash.expiring_soon_count > 0 ? 'warning' : 'success'}
+            value={inventoryDash.expiring_soon_count}
+          />
+        </div>
+      )}
+
+      {/* Chart Row 1: Revenue vs Spend */}
+      {revenueSpendRows.length > 0 && (
+        <Card>
+          <CardHeader className="space-y-3">
+            <h2 className="text-lg font-semibold text-warelyn-text">Revenue vs Spend</h2>
+            <ChartFilterBar onChange={setRevenueDays} options={[{ value: 7, label: '7d' }, { value: 30, label: '30d' }, { value: 90, label: '90d' }]} value={revenueDays} />
+          </CardHeader>
+          <CardBody>
+            <ResponsiveContainer height={280} width="100%">
+              <AreaChart data={revenueSpendRows}>
+                <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickFormatter={(value) => String(value).slice(5)} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickFormatter={(value) => formatMoney(value, currency)} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => formatMoney(value, currency)} />
+                <Area dataKey="revenue" fill="#10b981" fillOpacity={0.2} stroke="#10b981" strokeWidth={2} type="monotone" name="Revenue" />
+                <Area dataKey="spend" fill="#ef4444" fillOpacity={0.15} stroke="#ef4444" strokeWidth={2} type="monotone" name="Spend" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Chart Row 2: Order status + Stock movements */}
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader className="space-y-3">
@@ -255,6 +424,134 @@ export function TenantAdminDashboard() {
         </Card>
       </div>
 
+      {/* Chart Row 3: Top products, top vendors, tasks by role, stock health */}
+      <div className="grid gap-6 xl:grid-cols-2 2xl:grid-cols-4">
+        {salesDash?.top_products_by_revenue?.length > 0 && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-warelyn-text">Top Products by Revenue</h2>
+            </CardHeader>
+            <CardBody>
+              <div className="space-y-2">
+                {salesDash.top_products_by_revenue.slice(0, 5).map((item, index) => (
+                  <div key={item.product_name} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs font-bold text-warelyn-muted w-4 flex-shrink-0">{index + 1}</span>
+                      <span className="text-sm text-warelyn-text truncate">{item.product_name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-xs text-warelyn-muted">{formatNumber(item.units_sold)} sold</span>
+                      <span className="text-sm font-semibold text-warelyn-text">{formatMoney(item.revenue, currency)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        {purchaseDash?.top_vendors_by_spend?.length > 0 && (
+          <Card>
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-warelyn-text">Top Vendors by Spend</h2>
+            </CardHeader>
+            <CardBody>
+              <div className="space-y-2">
+                {purchaseDash.top_vendors_by_spend.slice(0, 5).map((item, index) => (
+                  <div key={item.vendor_name} className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs font-bold text-warelyn-muted w-4 flex-shrink-0">{index + 1}</span>
+                      <span className="text-sm text-warelyn-text truncate">{item.vendor_name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-xs text-warelyn-muted">{item.order_count} orders</span>
+                      <span className="text-sm font-semibold text-warelyn-text">{formatMoney(item.spend, currency)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBody>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-warelyn-text">Open Tasks by Role</h2>
+          </CardHeader>
+          <CardBody>
+            {openTasksByRole.length > 0 ? (
+              <div className="flex flex-col items-center gap-4">
+                <ResponsiveContainer height={140} width="100%">
+                  <PieChart>
+                    <Pie
+                      cx="50%" cy="50%" data={openTasksByRole} dataKey="count" nameKey="role"
+                      innerRadius={32} outerRadius={60} paddingAngle={2}
+                    >
+                      {openTasksByRole.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                  {openTasksByRole.map((row, i) => (
+                    <Link key={row.role} className="flex items-center gap-1.5 text-xs hover:underline" to={`/my-tasks?role=${row.role}`}>
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                      <span className="text-warelyn-text">{row.role.replace(/_/g, ' ')}</span>
+                      <strong className="text-warelyn-primary">{row.count}</strong>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <EmptyState description="No open tasks across roles." illustration={emptyStateIllustrations.overview} title="No tasks" />
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2 className="text-lg font-semibold text-warelyn-text">Stock Health</h2>
+          </CardHeader>
+          <CardBody>
+            {inventoryDash ? (
+              <div className="flex flex-col items-center gap-4">
+                <ResponsiveContainer height={140} width="100%">
+                  <PieChart>
+                    <Pie
+                      cx="50%" cy="50%" data={[
+                        { name: 'Healthy', value: Math.max(0, inventoryDash.total_sku_count - inventoryDash.low_stock_count - inventoryDash.blocked_stock_count) },
+                        { name: 'Low Stock', value: inventoryDash.low_stock_count },
+                        { name: 'Blocked', value: inventoryDash.blocked_stock_count },
+                        { name: 'Expiring', value: inventoryDash.expiring_soon_count },
+                      ].filter((d) => d.value > 0)} dataKey="value" nameKey="name"
+                      innerRadius={32} outerRadius={60} paddingAngle={2}
+                    >
+                      <Cell fill="#10b981" />
+                      <Cell fill="#f59e0b" />
+                      <Cell fill="#ef4444" />
+                      <Cell fill="#8b5cf6" />
+                    </Pie>
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-warelyn-text">
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Healthy</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-500" /> Low Stock</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" /> Blocked</span>
+                  <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-purple-500" /> Expiring</span>
+                </div>
+                <Link className="text-xs font-semibold text-warelyn-primary hover:underline" to="/reports/inventory-summary">View inventory summary →</Link>
+              </div>
+            ) : (
+              <EmptyState description="No inventory data." illustration={emptyStateIllustrations.overview} title="No data" />
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Team breakdown + Pending actions */}
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
@@ -266,7 +563,7 @@ export function TenantAdminDashboard() {
                 {taskByRole.map((row, index) => (
                   <Link className="flex items-center justify-between rounded-lg border border-warelyn-border px-3 py-2 text-sm hover:bg-gray-50" key={row.role} to={`/my-tasks?role=${row.role}`}>
                     <span className="inline-flex items-center gap-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: ROLE_COLORS[index % ROLE_COLORS.length] }} />
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                       <span className="font-medium text-warelyn-text">{row.role.replace(/_/g, ' ')}</span>
                     </span>
                     <strong className="text-warelyn-primary">{row.count}</strong>

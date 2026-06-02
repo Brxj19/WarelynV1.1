@@ -1,4 +1,4 @@
-import { Bot, Send, Sparkles, X } from 'lucide-react';
+import { ExternalLink, Send, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -6,6 +6,23 @@ import { Badge } from './ui/Badge.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import * as faqService from '../services/faqService.js';
+
+const LS_POS = 'warelyn_faq_widget_pos';
+const LS_SIZE = 'warelyn_faq_widget_size';
+const MIN_W = 280;
+const MIN_H = 340;
+
+function loadPos() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_POS));
+  } catch { return null; }
+}
+
+function loadSize() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_SIZE));
+  } catch { return null; }
+}
 
 const allowedRoles = new Set([
   'TENANT_ADMIN',
@@ -30,6 +47,18 @@ export function FaqChatWidget() {
   const [suggestions, setSuggestions] = useState([]);
   const [messages, setMessages] = useState([]);
   const widgetBottomRef = useRef(null);
+  const panelRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const savedPos = loadPos();
+  const savedSize = loadSize();
+  const [pos, setPos] = useState(savedPos || { right: 24, bottom: 80 });
+  const [size, setSize] = useState(savedSize || { width: 352, height: 460 });
+
+  const dragging = useRef(false);
+  const resizing = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0, pos: { right: 0, bottom: 80 } });
+  const resizeStart = useRef({ x: 0, y: 0, size: { width: 352, height: 460 } });
 
   const canUseFaq = useMemo(() => allowedRoles.has(user?.role), [user?.role]);
 
@@ -42,17 +71,75 @@ export function FaqChatWidget() {
     widgetBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, asking]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onMouseMove(e) {
+      if (dragging.current) {
+        const dx = dragStart.current.x - e.clientX;
+        const dy = dragStart.current.y - e.clientY;
+        const newRight = Math.max(8, dragStart.current.pos.right + dx);
+        const newBottom = Math.max(8, dragStart.current.pos.bottom + dy);
+        setPos({ right: newRight, bottom: newBottom });
+      }
+      if (resizing.current) {
+        const dx = e.clientX - resizeStart.current.x;
+        const dy = e.clientY - resizeStart.current.y;
+        const newW = Math.max(MIN_W, resizeStart.current.size.width + dx);
+        const newH = Math.max(MIN_H, resizeStart.current.size.height + dy);
+        setSize({ width: newW, height: newH });
+      }
+    }
+    function onMouseUp() {
+      if (dragging.current) {
+        dragging.current = false;
+        localStorage.setItem(LS_POS, JSON.stringify(pos));
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+      if (resizing.current) {
+        resizing.current = false;
+        localStorage.setItem(LS_SIZE, JSON.stringify(size));
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [open, pos, size]);
+
+  function onHeaderDown(e) {
+    dragging.current = true;
+    dragStart.current = { x: e.clientX, y: e.clientY, pos: { ...pos } };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+  }
+
+  function onResizeDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizing.current = true;
+    resizeStart.current = { x: e.clientX, y: e.clientY, size: { ...size } };
+    document.body.style.cursor = 'nwse-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function handlePopout() {
+    window.open('/faq', '_blank', 'noopener,noreferrer');
+  }
+
   if (!canUseFaq) return null;
 
   async function ask(inputQuestion) {
     const value = (inputQuestion ?? question).trim();
     if (!value || asking) return;
-
     const promptMessage = { role: 'USER', content: value };
     setMessages((prev) => [...prev, promptMessage]);
     setQuestion('');
     setAsking(true);
-
     try {
       const response = await faqService.askFaq(accessToken, value);
       setMessages((prev) => [...prev, { role: 'ASSISTANT', content: response.answer, payload: response }]);
@@ -64,26 +151,47 @@ export function FaqChatWidget() {
     }
   }
 
+  const isRhs = pos.right < 200;
+
   return (
-    <div className="fixed bottom-4 right-4 z-40">
-      {open ? (
-        <div className="absolute bottom-14 right-0 w-[22rem] rounded-xl border border-warelyn-border bg-white shadow-xl">
-          <div className="flex items-center justify-between rounded-t-xl border-b border-warelyn-border bg-slate-50 px-3 py-2">
+    <>
+      {open && (
+        <div
+          ref={panelRef}
+          className="fixed z-50 flex flex-col rounded-xl border border-warelyn-border bg-white shadow-xl overflow-hidden"
+          style={{ width: size.width, height: size.height, right: pos.right, bottom: pos.bottom }}
+        >
+          <div
+            ref={dragRef}
+            className="flex items-center justify-between border-b border-warelyn-border bg-slate-50 px-3 py-2 cursor-grab active:cursor-grabbing flex-shrink-0"
+            onMouseDown={onHeaderDown}
+          >
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-warelyn-text">
               <Sparkles size={16} className="text-warelyn-primary" />
               FAQ Assistant
             </div>
-            <button
-              type="button"
-              className="rounded-md p-1 text-warelyn-muted transition hover:bg-slate-100 hover:text-warelyn-text"
-              onClick={() => setOpen(false)}
-              aria-label="Close FAQ chat"
-            >
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                className="rounded-md p-1 text-warelyn-muted transition hover:bg-slate-100 hover:text-warelyn-text"
+                onClick={handlePopout}
+                title="Open in new tab"
+                aria-label="Open FAQ in new tab"
+              >
+                <ExternalLink size={14} />
+              </button>
+              <button
+                type="button"
+                className="rounded-md p-1 text-warelyn-muted transition hover:bg-slate-100 hover:text-warelyn-text"
+                onClick={() => setOpen(false)}
+                aria-label="Close FAQ chat"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
-          <div className="max-h-80 space-y-3 overflow-y-auto px-3 py-3">
+          <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3" style={{ minHeight: 0 }}>
             {messages.length === 0 ? (
               suggestions.length === 0 ? (
                 <div className="space-y-2">
@@ -164,7 +272,7 @@ export function FaqChatWidget() {
             )}
           </div>
 
-          <div className="border-t border-warelyn-border p-3">
+          <div className="border-t border-warelyn-border p-3 flex-shrink-0">
             <div className="flex items-center gap-2">
               <input
                 type="text"
@@ -190,18 +298,28 @@ export function FaqChatWidget() {
               </button>
             </div>
           </div>
+
+          <div
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-warelyn-primary/10 rounded-bl-lg"
+            onMouseDown={onResizeDown}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" className="absolute bottom-0.5 right-0.5 text-warelyn-muted">
+              <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          </div>
         </div>
-      ) : null}
+      )}
 
       <button
         type="button"
-        className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-warelyn-primary text-white shadow-lg transition hover:brightness-105"
+        className="fixed bottom-4 right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-warelyn-primary text-white shadow-lg transition hover:brightness-105"
         onClick={() => setOpen(true)}
         aria-label="Open FAQ assistant"
         title="FAQ Assistant"
       >
         <Sparkles size={20} />
       </button>
-    </div>
+    </>
   );
 }

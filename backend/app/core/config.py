@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     ai_retrieval_top_k: int = 6
     ai_min_confidence: float = 0.42
 
+    mongo_uri: str = "mongodb://localhost:27017/"
+    mongo_db_name: str = "warelyn_assistant"
+
     @field_validator("database_url", "jwt_secret_key", "super_admin_email", "super_admin_password", "gemini_api_key")
     @classmethod
     def required_secret_setting(cls, value: str, info):

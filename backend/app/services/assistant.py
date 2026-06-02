@@ -8,22 +8,15 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.models.assistant import (
-    AssistantFeedbackValue,
-    AssistantMessage,
-    AssistantMessageRole,
-    AssistantSession,
-    FAQChunk,
-    KnowledgeSourceType,
-)
+from app.models.assistant import AssistantMessageRole, FAQChunk, KnowledgeSourceType
 from app.models.auth import UserRole
 from app.models.workflow import WorkflowTaskStatus
 from app.repositories.assistant import AssistantRepository
+from app.repositories.assistant_mongo import AssistantMongoRepository
 from app.repositories.audit import AuditLogRepository
 from app.repositories.reports import ReportsRepository
 from app.repositories.workflow import WorkflowRepository
@@ -176,6 +169,7 @@ class AssistantService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.repository = AssistantRepository(db)
+        self.mongo_repo = AssistantMongoRepository()
         self.audit_repository = AuditLogRepository(db)
         self.reports_repository = ReportsRepository(db)
         self.workflow_repository = WorkflowRepository(db)
@@ -315,30 +309,28 @@ class AssistantService:
         )
         return result
 
-    def create_session(self, *, tenant_id: int, user_id: int, title: str | None = None) -> AssistantSession:
-        session = self.repository.create_session(
+    def create_session(self, *, tenant_id: int, user_id: int, title: str | None = None) -> dict:
+        session = self.mongo_repo.create_session(
             tenant_id=tenant_id,
             user_id=user_id,
             title=title or "New Assistant Session",
         )
-        self.db.commit()
-        self.db.refresh(session)
         self._audit_event(
             tenant_id=tenant_id,
             actor_user_id=user_id,
             actor_role=UserRole.TENANT_ADMIN.value,
             action="ASSISTANT_SESSION_CREATE",
             entity_type="assistant_session",
-            entity_id=str(session.id),
-            metadata={"title": session.title},
+            entity_id=str(session["id"]),
+            metadata={"title": session["title"]},
         )
         return session
 
     def get_session_detail(self, *, tenant_id: int, user_id: int, session_id: int) -> dict[str, Any]:
-        session = self.repository.get_session(tenant_id=tenant_id, session_id=session_id)
-        if session is None or session.user_id != user_id:
+        session = self.mongo_repo.get_session(tenant_id=tenant_id, session_id=session_id)
+        if session is None or session["user_id"] != user_id:
             raise AppError("ASSISTANT_SESSION_NOT_FOUND", "Assistant session not found.", 404)
-        messages = self.repository.list_messages(tenant_id=tenant_id, session_id=session_id)
+        messages = self.mongo_repo.list_messages(tenant_id=tenant_id, session_id=session_id)
         return {"session": session, "messages": messages}
 
     def ask_session(
@@ -350,15 +342,19 @@ class AssistantService:
         session_id: int,
         question: str,
     ) -> dict[str, Any]:
-        session = self.repository.get_session(tenant_id=tenant_id, session_id=session_id)
-        if session is None or session.user_id != user_id:
+        session = self.mongo_repo.get_session(tenant_id=tenant_id, session_id=session_id)
+        if session is None or session["user_id"] != user_id:
             raise AppError("ASSISTANT_SESSION_NOT_FOUND", "Assistant session not found.", 404)
+
+        if self.mongo_repo.count_messages(tenant_id=tenant_id, session_id=session_id) == 0:
+            title = question[:80].rstrip()
+            self.mongo_repo.update_session_title(session_id, title)
 
         started = time.perf_counter()
         intent = self._detect_report_intent(question)
         report_filters = self._extract_filters(question, tenant_id) if intent else {}
         report_data = self._fetch_report_data(tenant_id, intent["report_type"], report_filters) if intent else None
-        self.repository.create_message(
+        self.mongo_repo.create_message(
             tenant_id=tenant_id,
             session_id=session_id,
             user_id=user_id,
@@ -368,7 +364,7 @@ class AssistantService:
         if self._is_off_topic_question(question) and intent is None:
             result = self._off_topic_result()
             usage = {"total_tokens": 0}
-            assistant_message = self.repository.create_message(
+            assistant_message = self.mongo_repo.create_message(
                 tenant_id=tenant_id,
                 session_id=session_id,
                 user_id=None,
@@ -387,9 +383,7 @@ class AssistantService:
                     "latency_ms": round((time.perf_counter() - started) * 1000, 2),
                 },
             )
-            session.updated_at = datetime.now(UTC)
-            self.db.commit()
-            self.db.refresh(assistant_message)
+            self.mongo_repo.update_session_timestamp(session_id)
             result["message"] = assistant_message
             result["report_data"] = None
             self._audit_event(
@@ -409,7 +403,7 @@ class AssistantService:
                 },
             )
             return result
-        history = self.repository.list_messages(tenant_id=tenant_id, session_id=session_id)[-8:]
+        history = self.mongo_repo.list_messages(tenant_id=tenant_id, session_id=session_id)[-8:]
         candidates = self._retrieve_chunks(tenant_id=tenant_id, question=question)
         context_blocks = [self._context_block(row) for row in candidates]
         tenant_snapshot = self._tenant_admin_snapshot(tenant_id) if role == UserRole.TENANT_ADMIN else None
@@ -422,7 +416,7 @@ class AssistantService:
             role=role,
         )
         result = self._apply_confidence_policy(answer_payload, candidates)
-        assistant_message = self.repository.create_message(
+        assistant_message = self.mongo_repo.create_message(
             tenant_id=tenant_id,
             session_id=session_id,
             user_id=None,
@@ -441,9 +435,7 @@ class AssistantService:
                 "latency_ms": round((time.perf_counter() - started) * 1000, 2),
             },
         )
-        session.updated_at = datetime.now(UTC)
-        self.db.commit()
-        self.db.refresh(assistant_message)
+        self.mongo_repo.update_session_timestamp(session_id)
         result["message"] = assistant_message
         result["report_data"] = report_data
         self._audit_event(
@@ -474,18 +466,16 @@ class AssistantService:
         value: str,
         note: str | None,
     ):
-        message = self.repository.get_message(tenant_id=tenant_id, message_id=message_id)
+        message = self.mongo_repo.get_message(tenant_id=tenant_id, message_id=message_id)
         if message is None:
             raise AppError("ASSISTANT_MESSAGE_NOT_FOUND", "Assistant message was not found.", 404)
-        feedback = self.repository.upsert_feedback(
+        feedback = self.mongo_repo.upsert_feedback(
             tenant_id=tenant_id,
             message_id=message_id,
             user_id=user_id,
             value=value,
             note=note,
         )
-        self.db.commit()
-        self.db.refresh(feedback)
         self._audit_event(
             tenant_id=tenant_id,
             actor_user_id=user_id,
@@ -497,35 +487,25 @@ class AssistantService:
         )
         return feedback
 
-    def telemetry(self, *, tenant_id: int) -> dict[str, Any]:
-        rows = list(
-            self.db.scalars(
-                select(AssistantMessage).where(
-                    AssistantMessage.tenant_id == tenant_id,
-                    AssistantMessage.role == AssistantMessageRole.ASSISTANT.value,
-                )
-            )
+    def delete_session(self, *, tenant_id: int, user_id: int, session_id: int) -> None:
+        session = self.mongo_repo.get_session(tenant_id=tenant_id, session_id=session_id)
+        if session is None or session["user_id"] != user_id:
+            raise AppError("ASSISTANT_SESSION_NOT_FOUND", "Assistant session not found.", 404)
+        self.mongo_repo.delete_session(tenant_id=tenant_id, session_id=session_id)
+        self._audit_event(
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            actor_role=UserRole.TENANT_ADMIN.value,
+            action="ASSISTANT_SESSION_DELETE",
+            entity_type="assistant_session",
+            entity_id=str(session_id),
         )
-        total = len(rows)
-        if total == 0:
-            return {
-                "total_requests": 0,
-                "avg_latency_ms": 0.0,
-                "total_tokens": 0,
-                "abstain_rate_pct": 0.0,
-                "citation_rate_pct": 0.0,
-            }
-        latency_values = [float((row.metadata_json or {}).get("latency_ms", 0.0)) for row in rows]
-        abstains = [row for row in rows if (row.metadata_json or {}).get("abstained") is True]
-        citation_count = [row for row in rows if row.citations_json]
-        total_tokens = sum(int((row.usage_json or {}).get("total_tokens", 0)) for row in rows)
-        return {
-            "total_requests": total,
-            "avg_latency_ms": round(sum(latency_values) / total, 2),
-            "total_tokens": total_tokens,
-            "abstain_rate_pct": round((len(abstains) * 100.0) / total, 2),
-            "citation_rate_pct": round((len(citation_count) * 100.0) / total, 2),
-        }
+
+    def list_sessions(self, *, tenant_id: int, user_id: int) -> list[dict]:
+        return self.mongo_repo.list_sessions_for_user(tenant_id=tenant_id, user_id=user_id)
+
+    def telemetry(self, *, tenant_id: int) -> dict[str, Any]:
+        return self.mongo_repo.get_telemetry(tenant_id=tenant_id)
 
     def _knowledge_sources(self) -> list[dict[str, Any]]:
         root = Path(__file__).resolve().parents[3]
@@ -1188,7 +1168,7 @@ class AssistantService:
         context_blocks: list[str],
         mode: str,
         tenant_snapshot: dict[str, Any] | None,
-        history: list[AssistantMessage] | None = None,
+        history: list[dict] | None = None,
         role: UserRole | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         if not context_blocks:
@@ -1245,7 +1225,7 @@ class AssistantService:
             user_prompt_parts.append(f"Tenant snapshot: {json.dumps(tenant_snapshot, default=str)}")
         if history:
             convo = [
-                {"role": msg.role, "content": msg.content}
+                {"role": msg["role"], "content": msg["content"]}
                 for msg in history[-6:]
             ]
             user_prompt_parts.append(f"Recent conversation: {json.dumps(convo)}")

@@ -1,5 +1,9 @@
 import { apiRequest } from './apiClient.js';
 
+export function listAssistantSessions(accessToken) {
+  return apiRequest('/assistant/sessions', { accessToken });
+}
+
 export function createAssistantSession(accessToken, title = null) {
   return apiRequest('/assistant/sessions', {
     accessToken,
@@ -25,6 +29,13 @@ export function submitAssistantFeedback(accessToken, messageId, value, note = nu
     accessToken,
     method: 'POST',
     body: JSON.stringify({ value, note }),
+  });
+}
+
+export function deleteAssistantSession(accessToken, sessionId) {
+  return apiRequest(`/assistant/sessions/${sessionId}`, {
+    accessToken,
+    method: 'DELETE',
   });
 }
 

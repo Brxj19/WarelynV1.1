@@ -47,6 +47,8 @@ services:
       WARELYN_SMTP_FROM_NAME: Warelyn
       WARELYN_SMTP_USE_TLS: "false"
       WARELYN_SMTP_USE_SSL: "false"
+      WARELYN_MONGO_URI: mongodb://mongodb:27017/
+      WARELYN_MONGO_DB_NAME: warelyn_assistant
       WARELYN_EMAIL_DELIVERY_MODE: mailhog
     ports:
       - "8000:8000"
@@ -55,6 +57,19 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+  mongodb:
+    image: mongo:7
+    container_name: warelyn-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   frontend:
     image: node:20-alpine
@@ -73,4 +88,5 @@ services:
 
 volumes:
   mysql-data:
+  mongo-data:
   frontend-node-modules:
