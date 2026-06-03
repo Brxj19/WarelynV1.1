@@ -13,6 +13,7 @@ import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDate } from '../utils/formatters.js';
 import { getDateRangeLabel, getNextSort, isDateInRange, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import * as documentService from '../services/documentService.js';
 import * as catalogService from '../services/catalogService.js';
 import * as purchasingService from '../services/purchasingService.js';
 
@@ -24,6 +25,7 @@ export function PurchasesPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [vendorsById, setVendorsById] = useState({});
+  const [bills, setBills] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -38,9 +40,14 @@ export function PurchasesPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [orderRows, vendorRows] = await Promise.all([purchasingService.listPurchaseOrders(accessToken), catalogService.listVendors(accessToken)]);
+        const [orderRows, vendorRows, billRows] = await Promise.all([
+          purchasingService.listPurchaseOrders(accessToken),
+          catalogService.listVendors(accessToken),
+          documentService.listBills(accessToken),
+        ]);
         setOrders(orderRows);
         setVendorsById(Object.fromEntries(vendorRows.map((row) => [row.id, row])));
+        setBills(billRows);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -49,6 +56,16 @@ export function PurchasesPage() {
     }
     load();
   }, [accessToken]);
+
+  const billByPurchaseOrderId = useMemo(
+    () =>
+      Object.fromEntries(
+        bills
+          .filter((bill) => bill.purchase_order_id && bill.status !== 'VOID')
+          .map((bill) => [bill.purchase_order_id, bill]),
+      ),
+    [bills],
+  );
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -161,6 +178,7 @@ export function PurchasesPage() {
               <th><SortableHeader label="PO number" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="po_number" sortState={sortState} /></th>
               <th><SortableHeader label="Vendor" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="vendor" sortState={sortState} /></th>
               <th><SortableHeader label="Status" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="status" sortState={sortState} /></th>
+              <th>Bill</th>
               <th className="text-right"><SortableHeader align="right" label="Lines" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="lines" sortState={sortState} /></th>
               <th><SortableHeader label="Date" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="order_date" sortState={sortState} /></th>
               <th />
@@ -172,6 +190,15 @@ export function PurchasesPage() {
                 <td><Link className="font-semibold text-warelyn-primary" to={`/purchases/${order.id}`}>{order.po_number}</Link></td>
                 <td>{vendorsById[order.vendor_id]?.name ?? `Vendor #${order.vendor_id}`}</td>
                 <td><StatusBadge status={order.status}>{order.status}</StatusBadge></td>
+                <td>
+                  {billByPurchaseOrderId[order.id] ? (
+                    <Link className="inline-flex" to={`/bills/${billByPurchaseOrderId[order.id].id}`}>
+                      <StatusBadge status="COMMITTED">Bill generated</StatusBadge>
+                    </Link>
+                  ) : (
+                    <StatusBadge status="DRAFT">Not generated</StatusBadge>
+                  )}
+                </td>
                 <td className="number-cell">{order.items.length}</td>
                 <td>{formatDate(order.order_date)}</td>
                 <td className="text-right">

@@ -45,6 +45,7 @@ import {
   UserRound,
   Users,
   Warehouse,
+  Search,
 } from 'lucide-react';
 
 export const writeRoles = ['TENANT_ADMIN', 'INVENTORY_MANAGER'];
@@ -275,6 +276,7 @@ export const quickCreateItems = [
 const detailRoutes = [
   { pattern: /^\/inventory$/, label: 'Inventory Dashboard', section: 'Overview', to: '/dashboard', icon: LayoutDashboard },
   { pattern: /^\/warehouses\/[^/]+$/, label: 'Warehouse Detail', section: 'Warehousing', to: '/warehouses', icon: Warehouse },
+  { pattern: /^\/putaway-tasks\/[^/]+$/, label: 'Putaway Task Detail', section: 'Warehousing', to: '/putaway-tasks', icon: LogIn },
   { pattern: /^\/cycle-counts\/[^/]+$/, label: 'Cycle Count Session', section: 'Warehousing', to: '/cycle-counts', icon: ClipboardList },
   { pattern: /^\/purchases\/[^/]+$/, label: 'Purchase Order Detail', section: 'Purchases', to: '/purchases', icon: ShoppingBag },
   { pattern: /^\/purchases\/[^/]+\/receive$/, label: 'Receive Purchase Order', section: 'Purchases', to: '/purchase-receipts/new', icon: Truck },

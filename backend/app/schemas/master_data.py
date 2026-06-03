@@ -1,4 +1,5 @@
-from datetime import datetime
+import enum
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -162,6 +163,82 @@ class ProductRead(TenantReadMixin):
     track_batch: bool
     track_expiry: bool
     track_serial: bool
+
+
+class ProductStockLocationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    warehouse_id: int
+    warehouse_name: str
+    location_id: int
+    location_name: str
+    quantity_on_hand: Decimal
+    quantity_available: Decimal
+    quantity_reserved: Decimal
+
+
+class ProductBatchDetailRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    batch_number: str
+    supplier_batch_number: str | None = None
+    manufacture_date: date | None = None
+    expiry_date: date | None = None
+    warranty_until: date | None = None
+    warehouse_id: int
+    warehouse_name: str
+    location_id: int
+    location_name: str
+    quantity_on_hand: Decimal
+    quantity_available: Decimal
+    quantity_reserved: Decimal
+    status: str
+    qr_payload: str
+    qr_matrix: list[list[bool]]
+
+
+class ProductSerialDetailRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    serial_number: str
+    batch_id: int | None = None
+    batch_number: str | None = None
+    warranty_until: date | None = None
+    expires_on: date | None = None
+    warehouse_id: int
+    warehouse_name: str
+    location_id: int
+    location_name: str
+    status: str
+    qr_payload: str
+    qr_matrix: list[list[bool]]
+
+
+class ProductDetailRead(ProductRead):
+    category_name: str | None = None
+    brand_name: str | None = None
+    available_quantity: Decimal
+    qr_payload: str
+    qr_matrix: list[list[bool]]
+    stock_rows: list[ProductStockLocationRead] = Field(default_factory=list)
+    batches: list[ProductBatchDetailRead] = Field(default_factory=list)
+    serials: list[ProductSerialDetailRead] = Field(default_factory=list)
+
+
+class ProductLabelTrackingMode(str, enum.Enum):
+    ALL = "ALL"
+    TRACKED = "TRACKED"
+    STANDARD = "STANDARD"
+    BATCH = "BATCH"
+    EXPIRY = "EXPIRY"
+    SERIAL = "SERIAL"
+
+
+class ProductLabelPrintRequest(BaseModel):
+    product_ids: list[int] = Field(min_length=1)
+    tracking_mode: ProductLabelTrackingMode = ProductLabelTrackingMode.ALL
 
 
 class WarehouseCreate(BaseModel):

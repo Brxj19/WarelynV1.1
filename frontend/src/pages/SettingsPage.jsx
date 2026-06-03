@@ -17,6 +17,13 @@ import * as settingsService from '../services/settingsService.js';
 import * as verificationService from '../services/verificationService.js';
 import * as documentService from '../services/documentService.js';
 
+function resolveUploadUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path) || path.startsWith('data:')) return path;
+  const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
+  return `${base.replace(/\/api$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 function TenantSettingsSection({ accessToken }) {
   const toast = useToast();
   const { refreshSettings } = useTenantSettings();
@@ -32,6 +39,8 @@ function TenantSettingsSection({ accessToken }) {
   const [invoiceEmailTemplates, setInvoiceEmailTemplates] = useState([]);
   const [billEmailTemplates, setBillEmailTemplates] = useState([]);
   const [verificationTemplates, setVerificationTemplates] = useState([]);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoUploadError, setLogoUploadError] = useState('');
 
   const tenantSections = [
     { group: 'Organization', items: [{ id: 'company', icon: Building2, label: 'Company' }, { id: 'address', icon: Globe, label: 'Address' }] },
@@ -78,6 +87,25 @@ function TenantSettingsSection({ accessToken }) {
 
   function handleChange(field) {
     return (e) => setForm((p) => ({ ...p, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
+  }
+
+  async function handleLogoUpload(file) {
+    if (!file || !editing) return;
+    setIsUploadingLogo(true);
+    setLogoUploadError('');
+    try {
+      const { url } = await settingsService.uploadTenantLogo(accessToken, file);
+      const updated = await settingsService.updateTenantSettings(accessToken, { document_logo_url: url });
+      setSettings(updated);
+      setForm((p) => ({ ...p, document_logo_url: url }));
+      refreshSettings();
+      toast.success('Logo uploaded.');
+    } catch (e) {
+      setLogoUploadError(e.message);
+      toast.error(e.message);
+    } finally {
+      setIsUploadingLogo(false);
+    }
   }
 
   async function handleSave() {
@@ -162,7 +190,68 @@ function TenantSettingsSection({ accessToken }) {
             <h3 className="text-base font-semibold text-warelyn-text mb-1">Document Settings</h3>
             <p className="text-sm text-warelyn-muted mb-4">Customize generated invoices and bills. Template selection here applies to all users in this tenant.</p>
             <div className="space-y-4">
-              <Input label="Document Logo URL" value={form.document_logo_url} onChange={handleChange('document_logo_url')} helper="URL to your company logo" disabled={!editing} />
+              <div className="rounded-xl border border-dashed border-warelyn-border bg-slate-50 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <div>
+                      <span className="block text-sm font-medium text-warelyn-text">Document Logo</span>
+                      <p className="text-xs text-warelyn-muted">Upload a logo from your device. PNG, JPG, or SVG up to 2MB.</p>
+                    </div>
+                    {logoUploadError ? <p className="text-xs text-red-600">{logoUploadError}</p> : null}
+                    <label
+                      className={`inline-flex items-center justify-center rounded-lg px-3 py-2 text-sm font-medium transition ${
+                        editing && !isUploadingLogo
+                          ? 'cursor-pointer bg-warelyn-primary text-white hover:bg-blue-800'
+                          : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                      }`}
+                    >
+                      {isUploadingLogo ? 'Uploading...' : 'Upload from device'}
+                      <input
+                        accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                        className="hidden"
+                        disabled={!editing || isUploadingLogo}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) handleLogoUpload(file);
+                        }}
+                        type="file"
+                      />
+                    </label>
+                    {form.document_logo_url ? (
+                      <button
+                        className="ml-3 text-xs font-medium text-warelyn-muted underline decoration-dotted underline-offset-4 hover:text-warelyn-primary"
+                        disabled={!editing || isUploadingLogo}
+                        onClick={async () => {
+                          try {
+                            const updated = await settingsService.updateTenantSettings(accessToken, { document_logo_url: null });
+                            setSettings(updated);
+                            setForm((p) => ({ ...p, document_logo_url: '' }));
+                            refreshSettings();
+                            toast.success('Logo removed.');
+                          } catch (e) {
+                            toast.error(e.message);
+                          }
+                        }}
+                        type="button"
+                      >
+                        Remove logo
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="min-h-24 min-w-48 rounded-lg border border-warelyn-border bg-white p-3">
+                    {form.document_logo_url ? (
+                      <img
+                        alt="Document logo preview"
+                        className="max-h-16 max-w-full object-contain"
+                        src={resolveUploadUrl(form.document_logo_url)}
+                      />
+                    ) : (
+                      <div className="flex h-16 items-center justify-center text-xs text-warelyn-muted">No logo uploaded yet</div>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div>
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium text-warelyn-text">Document Footer</span>

@@ -53,6 +53,22 @@ function listProducts(accessToken) {
   return apiRequest('/catalog/products', { accessToken });
 }
 
+function normalizePutawayTask(task) {
+  if (!task || typeof task !== 'object' || Array.isArray(task)) return null;
+  const status = typeof task.status === 'string' ? task.status : task.status?.value ?? String(task.status ?? '');
+  return {
+    ...task,
+    status,
+    product_id: task.product_id ?? '',
+    warehouse_id: task.warehouse_id ?? '',
+    from_location_id: task.from_location_id ?? '',
+    to_location_id: task.to_location_id ?? null,
+    quantity: task.quantity ?? '',
+    receipt_id: task.receipt_id ?? null,
+    created_at: task.created_at ?? null,
+  };
+}
+
 export function PutawayTasksPage() {
   const { accessToken } = useAuth();
   const navigate = useNavigate();
@@ -302,7 +318,7 @@ export function PutawayTaskDetailPage() {
     setIsLoading(true);
     setError('');
     try {
-      setTask(await getPutawayTask(accessToken, id));
+      setTask(normalizePutawayTask(await getPutawayTask(accessToken, id)));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -342,34 +358,34 @@ export function PutawayTaskDetailPage() {
         <CardHeader title="Task Details" />
         <CardBody>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            <div>
-              <p className="text-xs text-warelyn-muted">Status</p>
-              <StatusBadge status={task.status}>{task.status}</StatusBadge>
-            </div>
+              <div>
+                <p className="text-xs text-warelyn-muted">Status</p>
+              <StatusBadge status={task.status}>{task.status || '-'}</StatusBadge>
+              </div>
             <div>
               <p className="text-xs text-warelyn-muted">Product ID</p>
-              <p className="font-medium">#{task.product_id}</p>
+              <p className="font-medium">#{String(task.product_id || '-')}</p>
             </div>
             <div>
               <p className="text-xs text-warelyn-muted">Warehouse ID</p>
-              <p className="font-medium">#{task.warehouse_id}</p>
+              <p className="font-medium">#{String(task.warehouse_id || '-')}</p>
             </div>
             <div>
               <p className="text-xs text-warelyn-muted">Quantity</p>
-              <p className="font-medium">{task.quantity}</p>
+              <p className="font-medium">{String(task.quantity || '-')}</p>
             </div>
             <div>
               <p className="text-xs text-warelyn-muted">From Location</p>
-              <p className="font-medium">#{task.from_location_id}</p>
+              <p className="font-medium">#{String(task.from_location_id || '-')}</p>
             </div>
             <div>
               <p className="text-xs text-warelyn-muted">To Location</p>
-              <p className="font-medium">{task.to_location_id ? `#${task.to_location_id}` : 'Not assigned'}</p>
+              <p className="font-medium">{task.to_location_id ? `#${String(task.to_location_id)}` : 'Not assigned'}</p>
             </div>
             {task.receipt_id && (
               <div>
                 <p className="text-xs text-warelyn-muted">Receipt</p>
-                <p className="font-medium">#{task.receipt_id}</p>
+                <p className="font-medium">#{String(task.receipt_id)}</p>
               </div>
             )}
             <div>

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from scripts.bootstrap_migrations import upgrade_database
 from app.core.security import get_password_hash
 from app.db.session import SessionLocal
 from app.models.auth import Tenant, User, UserRole, UserStatus
@@ -90,8 +91,12 @@ def get_tenant_and_admin(db: Session):
         )
         db.add(admin)
         db.flush()
-    elif admin.tenant_id != tenant.id:
-        admin.tenant_id = tenant.id
+    else:
+        admin.password_hash = get_password_hash(MINIMALIST_ADMIN_PASSWORD)
+        admin.status = UserStatus.ACTIVE
+        admin.email_verified_at = admin.email_verified_at or datetime.now(UTC)
+        if admin.tenant_id != tenant.id:
+            admin.tenant_id = tenant.id
         db.flush()
 
     return tenant, admin
@@ -468,6 +473,13 @@ def ensure_role_users(db: Session, tenant_id: int) -> dict[str, User]:
                 email_verified_at=datetime.now(UTC),
             )
             db.add(user)
+            db.flush()
+        else:
+            user.password_hash = get_password_hash("Warelyn@123")
+            user.status = UserStatus.ACTIVE
+            user.email_verified_at = user.email_verified_at or datetime.now(UTC)
+            if user.tenant_id != tenant_id:
+                user.tenant_id = tenant_id
             db.flush()
         out[user_data["role"].value] = user
     db.commit()
@@ -1388,6 +1400,7 @@ def summarize_counts(db: Session, tenant_id: int) -> dict[str, int]:
 
 
 def main():
+    upgrade_database()
     db = SessionLocal()
     try:
         tenant, admin = get_tenant_and_admin(db)

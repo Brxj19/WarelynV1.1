@@ -1,4 +1,4 @@
-import { Download, Plus, Upload } from 'lucide-react';
+import { Download, Plus, Printer, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -20,6 +20,7 @@ import { getNextSort, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useTenantSettings } from '../context/TenantSettingsContext.jsx';
 import * as catalogService from '../services/catalogService.js';
+import * as inventoryService from '../services/inventoryService.js';
 import { MasterDataFormPage, MasterDataListPage } from './MasterDataPage.jsx';
 
 const canWrite = new Set(['TENANT_ADMIN', 'INVENTORY_MANAGER']);
@@ -61,6 +62,7 @@ export function ProductsPage() {
   const { accessToken, user } = useAuth();
   const { currency } = useTenantSettings();
   const [products, setProducts] = useState([]);
+  const [stockRows, setStockRows] = useState([]);
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -72,6 +74,7 @@ export function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [sortState, setSortState] = useState({ key: 'name', direction: 'asc' });
   const mayWrite = canWrite.has(user?.role);
+  const canSeeStockLabels = ['TENANT_ADMIN', 'INVENTORY_MANAGER', 'VIEWER'].includes(user?.role);
 
   async function exportProducts() {
     const blob = await catalogService.downloadProductsCsv(accessToken, search);
@@ -88,14 +91,19 @@ export function ProductsPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [productRows, categoryRows, brandRows] = await Promise.all([
+        const requests = [
           catalogService.listProducts(accessToken),
           catalogService.listCategories(accessToken),
           catalogService.listBrands(accessToken),
-        ]);
+        ];
+        if (canSeeStockLabels) {
+          requests.push(inventoryService.listStock(accessToken));
+        }
+        const [productRows, categoryRows, brandRows, stockData = []] = await Promise.all(requests);
         setProducts(productRows);
         setCategories(categoryRows);
         setBrands(brandRows);
+        setStockRows(stockData);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -103,10 +111,18 @@ export function ProductsPage() {
       }
     }
     load();
-  }, [accessToken]);
+  }, [accessToken, canSeeStockLabels]);
 
   const categoriesById = useMemo(() => Object.fromEntries(categories.map((row) => [row.id, row])), [categories]);
   const brandsById = useMemo(() => Object.fromEntries(brands.map((row) => [row.id, row])), [brands]);
+  const availableLabelsByProduct = useMemo(() => {
+    const totals = {};
+    for (const row of stockRows) {
+      const available = Number(row.quantity_available ?? 0);
+      totals[row.product_id] = (totals[row.product_id] ?? 0) + available;
+    }
+    return totals;
+  }, [stockRows]);
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -134,6 +150,16 @@ export function ProductsPage() {
       }),
     [brandsById, categoriesById, filteredProducts, sortState],
   );
+
+  async function printProductLabels(product) {
+    const blob = await catalogService.downloadProductLabelsForProductPdf(accessToken, product.id);
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${product.sku ?? `product-${product.id}`}-labels.pdf`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   const activeFilters = [
     search
@@ -170,26 +196,28 @@ export function ProductsPage() {
     <div className="space-y-6">
       <PageHeader
         actions={
-          mayWrite ? (
-            <>
-              <Button variant="secondary" onClick={exportProducts}>
-                <Download size={16} />
-                Export CSV
-              </Button>
-              <Link to="/catalog/products/import">
-                <Button variant="secondary">
-                  <Upload size={16} />
-                  Import Products
+          <div className="flex flex-wrap items-end gap-2">
+            {mayWrite ? (
+              <>
+                <Button className="h-11" variant="secondary" onClick={exportProducts}>
+                  <Download size={16} />
+                  Export CSV
                 </Button>
-              </Link>
-              <Link to="/catalog/products/new">
-                <Button>
-                  <Plus size={16} />
-                  Product
-                </Button>
-              </Link>
-            </>
-          ) : null
+                <Link to="/catalog/products/import">
+                  <Button className="h-11" variant="secondary">
+                    <Upload size={16} />
+                    Import Products
+                  </Button>
+                </Link>
+                <Link to="/catalog/products/new">
+                  <Button className="h-11">
+                    <Plus size={16} />
+                    Product
+                  </Button>
+                </Link>
+              </>
+            ) : null}
+          </div>
         }
         kicker="Catalog"
         title="Products"
@@ -258,6 +286,7 @@ export function ProductsPage() {
               <th className="text-right"><SortableHeader align="right" label="Reorder level" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="reorder_level" sortState={sortState} /></th>
               <th className="text-right"><SortableHeader align="right" label="Cost" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="cost_price" sortState={sortState} /></th>
               <th><SortableHeader label="Status" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="status" sortState={sortState} /></th>
+              {canSeeStockLabels ? <th className="text-right">Labels</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -265,7 +294,9 @@ export function ProductsPage() {
               <tr key={product.id}>
                 <td>
                   <div className="space-y-1">
-                    <span className="font-semibold text-warelyn-text">{product.name}</span>
+                    <Link className="font-semibold text-warelyn-primary hover:underline" to={`/catalog/products/${product.id}`}>
+                      {product.name}
+                    </Link>
                     <p className="text-xs text-warelyn-muted">Unit {product.unit ?? 'pcs'}</p>
                   </div>
                 </td>
@@ -277,6 +308,22 @@ export function ProductsPage() {
                 <td className="number-cell">{product.reorder_level ?? '-'}</td>
                 <td className="number-cell">{formatMoney(product.cost_price, currency)}</td>
                 <td><StatusBadge status={product.status ?? 'ACTIVE'}>{product.status ?? 'ACTIVE'}</StatusBadge></td>
+                {canSeeStockLabels ? (
+                  <td className="text-right">
+                    <Button
+                      className="h-9 px-3 text-xs"
+                      disabled={Math.max(0, Math.floor(availableLabelsByProduct[product.id] ?? 0)) === 0}
+                      variant="secondary"
+                      onClick={() => printProductLabels(product)}
+                    >
+                      <Printer size={14} />
+                      Download labels
+                    </Button>
+                    <p className="mt-1 text-xs text-warelyn-muted">
+                      Qty {Math.max(0, Math.floor(availableLabelsByProduct[product.id] ?? 0))}
+                    </p>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -376,7 +423,12 @@ export function ProductFormPage() {
           <CardBody className="grid gap-4 md:grid-cols-2">
             <Input label="Product name" required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
             <Input label="SKU" required value={form.sku} onChange={(event) => setForm((current) => ({ ...current, sku: event.target.value }))} />
-            <BarcodeInput label="Barcode" onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))} value={form.barcode} />
+            <BarcodeInput
+              hint="Leave blank and Warelyn will generate a barcode automatically when the product is created."
+              label="Barcode"
+              onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+              value={form.barcode}
+            />
             <Input label="Unit" required value={form.unit} onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))} />
             <SelectField label="Category" onChange={(value) => setForm((current) => ({ ...current, category_id: value }))} options={[['', 'No category'], ...categories.map((row) => [String(row.id), row.name])]} value={form.category_id} />
             <SelectField label="Brand" onChange={(value) => setForm((current) => ({ ...current, brand_id: value }))} options={[['', 'No brand'], ...brands.map((row) => [String(row.id), row.name])]} value={form.brand_id} />

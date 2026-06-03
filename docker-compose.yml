@@ -8,7 +8,7 @@ services:
       MYSQL_PASSWORD: warelyn_dev_password
       MYSQL_ROOT_PASSWORD: root_dev_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -59,6 +59,40 @@ services:
         condition: service_healthy
       mongodb:
         condition: service_healthy
+
+  ikea-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warelyn-ikea-seed
+    command: python scripts/seed_ikea.py
+    working_dir: /app
+    environment:
+      WARELYN_DATABASE_URL: mysql+pymysql://warelyn:warelyn_dev_password@mysql:3306/warelyn_inventoryV1
+      WARELYN_JWT_SECRET_KEY: replace-with-a-long-random-secret
+      WARELYN_SUPER_ADMIN_EMAIL: admin@warelyn.dev
+      WARELYN_SUPER_ADMIN_PASSWORD: ChangeMe123!
+      WARELYN_SUPER_ADMIN_NAME: Warelyn Super Admin
+      WARELYN_SMTP_HOST: mailhog
+      WARELYN_SMTP_PORT: "1025"
+      WARELYN_SMTP_USERNAME: ""
+      WARELYN_SMTP_PASSWORD: ""
+      WARELYN_SMTP_FROM_EMAIL: no-reply@warelyn.dev
+      WARELYN_SMTP_FROM_NAME: Warelyn
+      WARELYN_SMTP_USE_TLS: "false"
+      WARELYN_SMTP_USE_SSL: "false"
+      WARELYN_MONGO_URI: mongodb://mongodb:27017/
+      WARELYN_MONGO_DB_NAME: warelyn_assistant
+      WARELYN_EMAIL_DELIVERY_MODE: mailhog
+    volumes:
+      - ./backend:/app
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    profiles:
+      - seed
 
   mongodb:
     image: mongo:7

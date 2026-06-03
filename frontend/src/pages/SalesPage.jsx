@@ -13,6 +13,7 @@ import { emptyStateIllustrations } from '../lib/emptyStates.js';
 import { formatDate } from '../utils/formatters.js';
 import { getDateRangeLabel, getNextSort, isDateInRange, sortRows } from '../utils/table.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import * as documentService from '../services/documentService.js';
 import * as catalogService from '../services/catalogService.js';
 import * as salesService from '../services/salesService.js';
 
@@ -24,6 +25,7 @@ export function SalesPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [customersById, setCustomersById] = useState({});
+  const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -38,9 +40,14 @@ export function SalesPage() {
       setIsLoading(true);
       setError('');
       try {
-        const [orderRows, customerRows] = await Promise.all([salesService.listSalesOrders(accessToken), catalogService.listCustomers(accessToken)]);
+        const [orderRows, customerRows, invoiceRows] = await Promise.all([
+          salesService.listSalesOrders(accessToken),
+          catalogService.listCustomers(accessToken),
+          documentService.listInvoices(accessToken),
+        ]);
         setOrders(orderRows);
         setCustomersById(Object.fromEntries(customerRows.map((row) => [row.id, row])));
+        setInvoices(invoiceRows);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -49,6 +56,16 @@ export function SalesPage() {
     }
     load();
   }, [accessToken]);
+
+  const invoiceBySalesOrderId = useMemo(
+    () =>
+      Object.fromEntries(
+        invoices
+          .filter((invoice) => invoice.sales_order_id && invoice.status !== 'VOID')
+          .map((invoice) => [invoice.sales_order_id, invoice]),
+      ),
+    [invoices],
+  );
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
@@ -156,6 +173,7 @@ export function SalesPage() {
               <th><SortableHeader label="SO number" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="order_number" sortState={sortState} /></th>
               <th><SortableHeader label="Customer" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="customer" sortState={sortState} /></th>
               <th><SortableHeader label="Status" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="status" sortState={sortState} /></th>
+              <th>Invoice</th>
               <th className="text-right"><SortableHeader align="right" label="Lines" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="lines" sortState={sortState} /></th>
               <th><SortableHeader label="Date" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="order_date" sortState={sortState} /></th>
               <th />
@@ -167,6 +185,15 @@ export function SalesPage() {
                 <td><Link className="font-semibold text-warelyn-primary" to={`/sales/${order.id}`}>{order.order_number}</Link></td>
                 <td>{customersById[order.customer_id]?.name ?? `Customer #${order.customer_id}`}</td>
                 <td><StatusBadge status={order.status}>{order.status}</StatusBadge></td>
+                <td>
+                  {invoiceBySalesOrderId[order.id] ? (
+                    <Link className="inline-flex" to={`/invoices/${invoiceBySalesOrderId[order.id].id}`}>
+                      <StatusBadge status="COMMITTED">Invoice generated</StatusBadge>
+                    </Link>
+                  ) : (
+                    <StatusBadge status="DRAFT">Not generated</StatusBadge>
+                  )}
+                </td>
                 <td className="number-cell">{order.items.length}</td>
                 <td>{formatDate(order.order_date)}</td>
                 <td className="text-right">

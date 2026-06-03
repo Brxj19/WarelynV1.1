@@ -21,7 +21,7 @@ export function PurchaseOrderFormPage() {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [vendors, setVendors] = useState([]);
   const [products, setProducts] = useState([]);
-  const [form, setForm] = useState({ vendor_id: '', po_number: '', order_date: todayIso, expected_date: '', notes: '' });
+  const [form, setForm] = useState({ vendor_id: '', po_number: `PO-${Date.now()}`, order_date: todayIso, expected_date: '', notes: '' });
   const [createdDateFloor, setCreatedDateFloor] = useState(todayIso);
   const [items, setItems] = useState([{ product_id: '', ordered_quantity: '1', unit_cost: '0', notes: '' }]);
   const [isLoading, setIsLoading] = useState(true);

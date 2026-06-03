@@ -313,7 +313,7 @@ Development URLs:
 
 - Frontend: `http://localhost:5173`
 - Backend API: `http://localhost:8000`
-- MySQL: `localhost:3306`
+- MySQL: `localhost:3307`
 - MailHog: `http://localhost:8025` (dev email viewer)
 
 ## Architecture Rules

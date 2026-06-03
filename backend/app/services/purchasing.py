@@ -42,6 +42,7 @@ class PurchasingService:
             min_reference_date=datetime.now(UTC).date(),
         )
         items = values.pop("items", [])
+        values["po_number"] = self._generate_po_number(tenant_id, values.get("po_number"))
         po = self.repository.create_purchase_order({**values, "tenant_id": tenant_id, "created_by": actor_id, "status": PurchaseOrderStatus.DRAFT})
         self._replace_order_items(tenant_id, po.id, items)
         return self._commit_and_get_po(tenant_id, po.id)
@@ -338,6 +339,16 @@ class PurchasingService:
     def _generate_grn_number(self, tenant_id: int) -> str:
         docs_repo = DocumentsRepository(self.db)
         seq = docs_repo.get_or_create_sequence(tenant_id, NumberSequenceKey.GRN, "GRN-", 5)
+        number = seq.next_number
+        seq.next_number += 1
+        self.db.flush()
+        return f"{seq.prefix}{str(number).zfill(seq.padding)}"
+
+    def _generate_po_number(self, tenant_id: int, value: str | None = None) -> str:
+        if value:
+            return value
+        docs_repo = DocumentsRepository(self.db)
+        seq = docs_repo.get_or_create_sequence(tenant_id, NumberSequenceKey.PURCHASE_ORDER, "PO-", 5)
         number = seq.next_number
         seq.next_number += 1
         self.db.flush()

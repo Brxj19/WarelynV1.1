@@ -37,6 +37,7 @@ const PlatformHealthPage = lazy(() => import('../pages/PlatformHealthPage.jsx').
 const PdfTemplatesPage = lazy(() => import('../pages/PdfTemplatesPage.jsx').then(m => ({ default: m.PdfTemplatesPage })));
 const ProductValuationReportPage = lazy(() => import('../pages/ProductValuationReportPage.jsx').then(m => ({ default: m.ProductValuationReportPage })));
 const ProductImportPage = lazy(() => import('../pages/ProductImportPage.jsx').then(m => ({ default: m.ProductImportPage })));
+const ProductDetailPage = lazy(() => import('../pages/ProductDetailPage.jsx').then(m => ({ default: m.ProductDetailPage })));
 const OperationalListPages = lazy(() => import('../pages/OperationalListPages.jsx'));
 const PurchaseOrderDetailPage = lazy(() => import('../pages/PurchaseOrderDetailPage.jsx').then(m => ({ default: m.PurchaseOrderDetailPage })));
 const PurchaseOrderFormPage = lazy(() => import('../pages/PurchaseOrderFormPage.jsx').then(m => ({ default: m.PurchaseOrderFormPage })));
@@ -112,6 +113,7 @@ export function AppRoutes() {
             <Route path="my-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF']}><MyTasksPage /></RoleGuard>} />
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="catalog/products" element={<LazyProductsPage />} />
+            <Route path="catalog/products/:id" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'PURCHASE_STAFF', 'SALES_STAFF', 'VIEWER']}><ProductDetailPage /></RoleGuard>} />
             <Route path="catalog/products/new" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><LazyProductFormPage /></RoleGuard>} />
             <Route path="catalog/products/import" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><ProductImportPage /></RoleGuard>} />
             <Route path="catalog/categories" element={<LazyCategoriesPage />} />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import * as authService from '../services/authService.js';
 import * as settingsService from '../services/settingsService.js';
@@ -32,6 +32,11 @@ export function AuthProvider({ children }) {
   const [refreshToken, setRefreshToken] = useState(() => readStoredTokens().refreshToken);
   const [isLoading, setIsLoading] = useState(Boolean(readStoredTokens().accessToken));
   const [defaultLandingPage, setDefaultLandingPage] = useState('/dashboard');
+  const latestAccessTokenRef = useRef(readStoredTokens().accessToken);
+
+  useEffect(() => {
+    latestAccessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   async function applyPreferences(token) {
     try {
@@ -55,38 +60,49 @@ export function AuthProvider({ children }) {
   }
 
   async function loadMe(token = accessToken) {
-    if (!token) {
+    const requestToken = token ?? latestAccessTokenRef.current;
+
+    if (!requestToken) {
       setIsLoading(false);
       return null;
     }
 
     setIsLoading(true);
     try {
-      const data = await authService.getMe(token);
+      const data = await authService.getMe(requestToken, { timeoutMs: 8000 });
+      if (latestAccessTokenRef.current !== requestToken) {
+        return null;
+      }
       setUser(data.user);
       setTenant(data.tenant);
-      await applyPreferences(token);
+      void applyPreferences(requestToken);
       return data;
     } catch (error) {
-      clearTokens();
-      setAccessToken(null);
-      setRefreshToken(null);
-      setUser(null);
-      setTenant(null);
+      if (latestAccessTokenRef.current === requestToken) {
+        clearTokens();
+        setAccessToken(null);
+        setRefreshToken(null);
+        setUser(null);
+        setTenant(null);
+      }
       throw error;
     } finally {
-      setIsLoading(false);
+      if (latestAccessTokenRef.current === requestToken) {
+        setIsLoading(false);
+      }
     }
   }
 
   async function login(payload) {
     const data = await authService.login(payload);
     storeTokens(data.access_token, data.refresh_token);
+    latestAccessTokenRef.current = data.access_token;
     setAccessToken(data.access_token);
     setRefreshToken(data.refresh_token);
     setUser(data.user);
     setTenant(data.tenant);
-    await applyPreferences(data.access_token);
+    setIsLoading(false);
+    void applyPreferences(data.access_token);
     return data;
   }
 
@@ -97,10 +113,12 @@ export function AuthProvider({ children }) {
   async function logout() {
     const tokenToRevoke = refreshToken;
     clearTokens();
+    latestAccessTokenRef.current = null;
     setAccessToken(null);
     setRefreshToken(null);
     setUser(null);
     setTenant(null);
+    setIsLoading(false);
     if (tokenToRevoke) {
       try {
         await authService.logout(tokenToRevoke);
@@ -111,8 +129,9 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    if (accessToken) {
-      loadMe(accessToken).catch(() => undefined);
+    const initialToken = latestAccessTokenRef.current;
+    if (initialToken) {
+      loadMe(initialToken).catch(() => undefined);
     } else {
       setIsLoading(false);
     }

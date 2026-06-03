@@ -21,8 +21,8 @@ export function refreshToken(refreshTokenValue) {
   });
 }
 
-export function getMe(accessToken) {
-  return apiRequest('/auth/me', { accessToken });
+export function getMe(accessToken, options = {}) {
+  return apiRequest('/auth/me', { accessToken, timeoutMs: options.timeoutMs ?? 8000 });
 }
 
 export function logout(refreshTokenValue) {

@@ -12,6 +12,8 @@ class NumberSequenceKey(str, enum.Enum):
     INVOICE = "INVOICE"
     BILL = "BILL"
     GRN = "GRN"
+    PURCHASE_ORDER = "PURCHASE_ORDER"
+    SALES_ORDER = "SALES_ORDER"
 
 
 class DocumentTemplateChannel(str, enum.Enum):

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError
 from app.models.inventory import ReferenceType, ReservationStatus
 from app.models.sales import SalesFulfillment, SalesFulfillmentStatus, SalesOrder, SalesOrderItem, SalesOrderStatus
+from app.models.documents import NumberSequenceKey
+from app.repositories.documents import DocumentsRepository
 from app.repositories.fulfillment import FulfillmentRepository
 from app.repositories.sales import SalesRepository
 from app.schemas.workflow import WorkflowTaskCreate
@@ -45,6 +47,7 @@ class SalesService:
             min_reference_date=datetime.now(UTC).date(),
         )
         items = values.pop("items", [])
+        values["order_number"] = self._generate_so_number(tenant_id, values.get("order_number"))
         order = self.repository.create_sales_order({**values, "tenant_id": tenant_id, "created_by": actor_id, "status": SalesOrderStatus.DRAFT})
         self._replace_order_items(tenant_id, order.id, items)
         return self._commit_and_get_order(tenant_id, order.id)
@@ -448,6 +451,16 @@ class SalesService:
             raise AppError("INVALID_EXPECTED_SHIP_DATE", "Expected ship date cannot be earlier than order date.", 400)
         if min_reference_date is not None and expected_ship_date < min_reference_date:
             raise AppError("INVALID_EXPECTED_SHIP_DATE", "Expected ship date cannot be earlier than created date.", 400)
+
+    def _generate_so_number(self, tenant_id: int, value: str | None = None) -> str:
+        if value:
+            return value
+        docs_repo = DocumentsRepository(self.db)
+        seq = docs_repo.get_or_create_sequence(tenant_id, NumberSequenceKey.SALES_ORDER, "SO-", 5)
+        number = seq.next_number
+        seq.next_number += 1
+        self.db.flush()
+        return f"{seq.prefix}{str(number).zfill(seq.padding)}"
 
     def _require_product(self, tenant_id: int, product_id: int):
         product = self.repository.get_product(tenant_id, product_id)

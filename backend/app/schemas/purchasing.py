@@ -15,7 +15,7 @@ class PurchaseOrderItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     vendor_id: int
-    po_number: str = Field(min_length=1, max_length=120)
+    po_number: str | None = Field(default=None, min_length=1, max_length=120)
     order_date: date
     expected_date: date | None = None
     notes: str | None = None

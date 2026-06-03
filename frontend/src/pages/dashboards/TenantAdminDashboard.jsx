@@ -240,7 +240,7 @@ export function TenantAdminDashboard() {
       <div className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-warelyn-border bg-white p-3 shadow-sm">
         <Link className="inline-flex items-center gap-2 rounded-md bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700" to="/reports/low-stock">
           <PackageSearch size={14} />
-          Low stock: {dashboard.low_stock_items.length}
+          Low stock: {dashboard.kpis?.low_stock_count ?? dashboard.low_stock_count ?? dashboard.low_stock_items.length}
         </Link>
         <Link className="inline-flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700" to="/reports/blocked-stock">
           <ShieldAlert size={14} />
@@ -250,10 +250,10 @@ export function TenantAdminDashboard() {
           <Boxes size={14} />
           Expiring: {dashboard.expiring_soon_count}
         </Link>
-        {purchaseDash?.pending_bills_count > 0 && (
-          <Link className="inline-flex items-center gap-2 rounded-md bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700" to="/documents?type=bill&status=SENT">
+        {purchaseDash?.overdue_bills_count > 0 && (
+          <Link className="inline-flex items-center gap-2 rounded-md bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700" to="/bills">
             <Banknote size={14} />
-            Unpaid bills: {purchaseDash.pending_bills_count}
+            Overdue bills: {purchaseDash.overdue_bills_count}
           </Link>
         )}
         {salesDash?.overdue_invoices_count > 0 && (

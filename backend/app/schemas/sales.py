@@ -15,7 +15,7 @@ class SalesOrderItemCreate(BaseModel):
 
 class SalesOrderCreate(BaseModel):
     customer_id: int
-    order_number: str = Field(min_length=1, max_length=120)
+    order_number: str | None = Field(default=None, min_length=1, max_length=120)
     order_date: date
     expected_ship_date: date | None = None
     notes: str | None = None

@@ -26,6 +26,24 @@ class InventoryRepository:
     def list_stock(self, tenant_id: int) -> list[WarehouseStock]:
         return list(self.db.scalars(select(WarehouseStock).where(WarehouseStock.tenant_id == tenant_id)))
 
+    def list_stock_for_product(self, tenant_id: int, product_id: int) -> list[WarehouseStock]:
+        return list(
+            self.db.scalars(
+                select(WarehouseStock).where(
+                    WarehouseStock.tenant_id == tenant_id,
+                    WarehouseStock.product_id == product_id,
+                )
+            )
+        )
+
+    def total_available_for_product(self, tenant_id: int, product_id: int):
+        return self.db.scalar(
+            select(func.coalesce(func.sum(WarehouseStock.quantity_available), 0)).where(
+                WarehouseStock.tenant_id == tenant_id,
+                WarehouseStock.product_id == product_id,
+            )
+        ) or 0
+
     def list_ledger(self, tenant_id: int) -> list[StockLedgerEntry]:
         return list(self.db.scalars(select(StockLedgerEntry).where(StockLedgerEntry.tenant_id == tenant_id).order_by(StockLedgerEntry.created_at.desc(), StockLedgerEntry.id.desc())))
 
@@ -35,11 +53,29 @@ class InventoryRepository:
     def list_batches(self, tenant_id: int) -> list[InventoryBatch]:
         return list(self.db.scalars(select(InventoryBatch).where(InventoryBatch.tenant_id == tenant_id).order_by(InventoryBatch.created_at.desc(), InventoryBatch.id.desc())))
 
+    def list_batches_for_product(self, tenant_id: int, product_id: int) -> list[InventoryBatch]:
+        return list(
+            self.db.scalars(
+                select(InventoryBatch)
+                .where(InventoryBatch.tenant_id == tenant_id, InventoryBatch.product_id == product_id)
+                .order_by(InventoryBatch.expiry_date, InventoryBatch.created_at.desc(), InventoryBatch.id.desc())
+            )
+        )
+
     def get_batch(self, tenant_id: int, batch_id: int) -> InventoryBatch | None:
         return self.db.scalar(select(InventoryBatch).where(InventoryBatch.id == batch_id, InventoryBatch.tenant_id == tenant_id))
 
     def list_serials(self, tenant_id: int) -> list[InventorySerial]:
         return list(self.db.scalars(select(InventorySerial).where(InventorySerial.tenant_id == tenant_id).order_by(InventorySerial.created_at.desc(), InventorySerial.id.desc())))
+
+    def list_serials_for_product(self, tenant_id: int, product_id: int) -> list[InventorySerial]:
+        return list(
+            self.db.scalars(
+                select(InventorySerial)
+                .where(InventorySerial.tenant_id == tenant_id, InventorySerial.product_id == product_id)
+                .order_by(InventorySerial.created_at.desc(), InventorySerial.id.desc())
+            )
+        )
 
     def get_serial(self, tenant_id: int, serial_id: int) -> InventorySerial | None:
         return self.db.scalar(select(InventorySerial).where(InventorySerial.id == serial_id, InventorySerial.tenant_id == tenant_id))

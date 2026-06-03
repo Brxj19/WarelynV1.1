@@ -5612,6 +5612,9 @@ _CLASSIC_INVOICE_PDF = '''<!DOCTYPE html>
   <div class="page">
     <div class="header">
       <div class="company">
+        {% if tenant.logo_url %}
+          <img alt="{{ tenant.company_name }} logo" src="{{ tenant.logo_url }}" style="display:block;max-height:42px;max-width:180px;object-fit:contain;margin:0 0 8px;" />
+        {% endif %}
         <h1>{{ tenant.company_name }}</h1>
 
         {% if tenant.contact_email %}
@@ -6064,6 +6067,9 @@ _CLASSIC_BILL_PDF = '''<!DOCTYPE html>
   <div class="page">
     <div class="header">
       <div class="company">
+        {% if tenant.logo_url %}
+          <img alt="{{ tenant.company_name }} logo" src="{{ tenant.logo_url }}" style="display:block;max-height:42px;max-width:180px;object-fit:contain;margin:0 0 8px;" />
+        {% endif %}
         <h1>{{ tenant.company_name }}</h1>
         {% if tenant.contact_email %}<p>{{ tenant.contact_email }}</p>{% endif %}
         {% if tenant.phone %}<p>{{ tenant.phone }}</p>{% endif %}

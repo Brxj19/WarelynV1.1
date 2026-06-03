@@ -15,3 +15,9 @@ export function getUserPreferences(accessToken) {
 export function updateUserPreferences(accessToken, data) {
   return apiRequest('/settings/preferences', { accessToken, method: 'PATCH', body: JSON.stringify(data) });
 }
+
+export function uploadTenantLogo(accessToken, file) {
+  const body = new FormData();
+  body.append('file', file);
+  return apiRequest('/uploads/logo', { accessToken, method: 'POST', body });
+}

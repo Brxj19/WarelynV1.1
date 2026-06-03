@@ -18,14 +18,17 @@ from app.schemas.master_data import (
     CustomerRead,
     CustomerUpdate,
     ProductCreate,
+    ProductDetailRead,
     ProductRead,
     ProductUpdate,
+    ProductLabelPrintRequest,
+    ProductLabelTrackingMode,
     VendorCreate,
     VendorRead,
     VendorUpdate,
 )
 from app.services.auth import UserContext
-from app.services.master_data import CatalogService
+from app.services.master_data import CatalogService, ProductLabelService
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 writer_roles = (UserRole.TENANT_ADMIN, UserRole.INVENTORY_MANAGER)
@@ -145,6 +148,50 @@ def export_products(search: str | None = None, context: UserContext = Depends(re
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="products.csv"'},
     )
+
+
+@router.post("/products/labels.pdf")
+def download_product_labels_pdf(
+    request: ProductLabelPrintRequest,
+    context: UserContext = Depends(require_roles(*product_reader_roles)),
+    db: Session = Depends(get_db),
+) -> Response:
+    pdf_bytes = ProductLabelService(db).render_tracking_product_labels_pdf(context.tenant_id, request.product_ids, request.tracking_mode)
+    mode_suffix = "" if request.tracking_mode == ProductLabelTrackingMode.ALL else f"-{request.tracking_mode.value.lower()}"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="product-labels{mode_suffix}.pdf"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@router.post("/products/{product_id}/labels.pdf")
+def download_product_labels_for_product_pdf(
+    product_id: int,
+    context: UserContext = Depends(require_roles(*product_reader_roles)),
+    db: Session = Depends(get_db),
+) -> Response:
+    pdf_bytes = ProductLabelService(db).render_product_labels_for_product_pdf(context.tenant_id, product_id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="product-{product_id}-labels.pdf"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
+@router.get("/products/{product_id}", response_model=ProductDetailRead)
+def get_product_detail(product_id: int, context: UserContext = Depends(require_roles(*product_reader_roles)), db: Session = Depends(get_db)) -> ProductDetailRead:
+    return CatalogService(db).get_product_detail(context.tenant_id, product_id)
 
 
 @router.post("/products", response_model=ProductRead, status_code=status.HTTP_201_CREATED)

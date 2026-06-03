@@ -68,6 +68,9 @@ def download_invoice_pdf(invoice_id: int, context: UserContext = Depends(require
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
             "X-Warelyn-Template-Id": str(result.template_id),
             "X-Warelyn-Template-Key": result.template_key,
             "X-Warelyn-Template-Purpose": result.template_purpose,
@@ -114,6 +117,9 @@ def download_bill_pdf(bill_id: int, context: UserContext = Depends(require_roles
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{bill.bill_number}.pdf"',
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
             "X-Warelyn-Template-Id": str(result.template_id),
             "X-Warelyn-Template-Key": result.template_key,
             "X-Warelyn-Template-Purpose": result.template_purpose,

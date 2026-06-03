@@ -33,6 +33,13 @@ cd backend
 .venv/bin/python scripts/seed_minimalist.py
 ```
 
+If you also want the IKEA tenant demo data, run:
+
+```bash
+cd backend
+.venv/bin/python scripts/seed_ikea.py
+```
+
 ### Frontend
 
 ```bash
@@ -48,7 +55,7 @@ The frontend expects the backend at `http://localhost:8000/api`.
 
 Docker Compose brings up:
 
-- MySQL on `localhost:3306`
+- MySQL on `localhost:3307` to avoid colliding with a local MySQL install
 - MongoDB on `localhost:27017`
 - MailHog on `http://localhost:8025`
 - Backend on `http://localhost:8000`
@@ -66,6 +73,35 @@ Stop the stack with:
 docker compose down
 ```
 
+### Fresh start options
+
+If you want a clean restart from the repo root and also want to wipe the Docker volumes so the database starts empty:
+
+```bash
+docker compose down -v --remove-orphans
+docker compose up --build -d
+```
+
+Then seed the data in a second terminal:
+
+```bash
+docker compose --profile seed run --rm ikea-seed
+```
+
+If you also want the Minimalist demo tenant seeded manually from the host:
+
+```bash
+cd backend
+.venv/bin/python scripts/seed_minimalist.py
+```
+
+If you only want to delete the old containers but keep the existing database data:
+
+```bash
+docker compose down --remove-orphans
+docker compose up --build -d
+```
+
 ### Docker seed data
 
 If you want the Minimalist tenant demo data after the stack is up:
@@ -73,6 +109,14 @@ If you want the Minimalist tenant demo data after the stack is up:
 ```bash
 docker compose exec backend python scripts/seed_minimalist.py
 ```
+
+If you want the IKEA tenant demo data after the stack is up:
+
+```bash
+docker compose --profile seed run --rm ikea-seed
+```
+
+The IKEA seed creates the `IKEA` tenant, products with batch/expiry/serial tracking, and a full set of purchase, sales, return, and cycle count workflows using the shared password `Ikea@12345` for the tenant users.
 
 ## 4. MailHog guide
 
