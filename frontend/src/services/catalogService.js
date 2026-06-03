@@ -39,7 +39,7 @@ export function listProducts(accessToken, search = '') {
 
 export async function downloadProductsCsv(accessToken, search = '') {
   const query = search ? `?search=${encodeURIComponent(search)}` : '';
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001/api'}/catalog/products/export.csv${query}`, {
+  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'}/catalog/products/export.csv${query}`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
   if (!response.ok) {

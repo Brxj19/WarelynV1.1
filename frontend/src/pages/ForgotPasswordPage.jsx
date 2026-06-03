@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody } from '../components/ui/Card.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import * as authService from '../services/authService.js';
 
@@ -148,7 +149,7 @@ export function ForgotPasswordPage() {
           </div>
         </div>
 
-        {error ? <ErrorState description={error} title="Action failed" /> : null}
+        {error ? <div className="mb-4"><ErrorState description={error} title="Action failed" /></div> : null}
 
         {step === RESET_STEP.ENTER_EMAIL ? (
           <form className="mt-6 space-y-4" onSubmit={sendCode}>
@@ -191,24 +192,22 @@ export function ForgotPasswordPage() {
 
         {step === RESET_STEP.ENTER_PASSWORD ? (
           <form className="mt-6 space-y-4" onSubmit={updatePassword}>
-            <Input
+            <PasswordInput
               autoComplete="new-password"
               id="new-password"
               label="New password"
               minLength={8}
               onChange={(event) => setNewPassword(event.target.value)}
               placeholder="At least 8 characters"
-              type="password"
               value={newPassword}
             />
-            <Input
+            <PasswordInput
               autoComplete="new-password"
               id="confirm-password"
               label="Confirm password"
               minLength={8}
               onChange={(event) => setConfirmPassword(event.target.value)}
               placeholder="Re-enter password"
-              type="password"
               value={confirmPassword}
             />
             <Button className="w-full" disabled={!canSubmitPassword || isSubmitting} isLoading={isSubmitting} type="submit">

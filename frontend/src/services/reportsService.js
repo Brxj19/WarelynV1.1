@@ -23,7 +23,7 @@ export function getReconciliation(accessToken, params) { return apiRequest(`/rep
 export function getOperationalDashboard(accessToken, params) { return apiRequest(`/dashboard/operations${query(params)}`, { accessToken }); }
 
 export async function downloadReportCsv(accessToken, reportKey, params = {}) {
-  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001/api'}/reports/${reportKey}/export.csv${query(params)}`, {
+  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'}/reports/${reportKey}/export.csv${query(params)}`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
   if (!response.ok) {

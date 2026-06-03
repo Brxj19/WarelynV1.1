@@ -1,7 +1,7 @@
 import { AlertTriangle, ClipboardList, PackageCheck, Truck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { DashboardSkeleton } from '../../components/dashboard/DashboardSkeleton.jsx';
 import { KpiCard } from '../../components/dashboard/KpiCard.jsx';
@@ -91,26 +91,30 @@ export function PurchaseStaffDashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card className="chart-card dashboard-card-hover">
           <CardHeader>
             <h2 className="text-lg font-semibold text-warelyn-text">Purchase orders by status</h2>
           </CardHeader>
           <CardBody>
-            <ResponsiveContainer height={260} width="100%">
+            <div className="chart-shell">
+            <ResponsiveContainer height={280} width="100%">
               <BarChart
                 data={purchaseStatusRows}
+                margin={{ top: 6, right: 14, left: 8, bottom: 10 }}
                 onClick={(state) => {
                   const payload = state?.activePayload?.[0]?.payload;
                   if (payload?.status) navigate(`/purchases?status=${payload.status}`);
                 }}
               >
                 <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="status" tick={{ fontSize: 10, fill: '#6b7280' }} angle={-20} interval={0} height={56} textAnchor="end" />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                <XAxis dataKey="status" tick={{ fontSize: 10, fill: '#6b7280' }} interval={0} height={42} tickMargin={8} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} width={42} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12, paddingBottom: 8 }} />
                 <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </CardBody>
         </Card>
 

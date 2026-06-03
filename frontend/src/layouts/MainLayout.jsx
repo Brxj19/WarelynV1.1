@@ -17,6 +17,16 @@ import { TenantSettingsProvider } from '../context/TenantSettingsContext.jsx';
 import { setGlobalErrorHandler } from '../services/apiClient.js';
 import { useToast } from '../hooks/useToast.jsx';
 
+function readRecentPages() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem('warelyn.recentPages') || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    window.localStorage.removeItem('warelyn.recentPages');
+    return [];
+  }
+}
+
 export function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,7 +41,7 @@ export function MainLayout() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const navItems = useMemo(() => flattenNav(user?.role), [user?.role]);
   const [openGroup, setOpenGroup] = useState(() => activeGroupFor(location.pathname, user?.role));
-  const [history, setHistory] = useState(() => JSON.parse(window.localStorage.getItem('warelyn.recentPages') || '[]'));
+  const [history, setHistory] = useState(readRecentPages);
   const current = useMemo(() => resolveRouteMeta(location.pathname, user?.role), [location.pathname, user?.role]);
 
   useEffect(() => setOpenGroup(activeGroupFor(location.pathname, user?.role)), [location.pathname, user?.role]);
@@ -76,7 +86,7 @@ export function MainLayout() {
           <Button aria-label="Open navigation menu" className="topbar-icon-btn lg:hidden" onClick={() => setIsSidebarOpen(true)} title="Open menu" type="button" variant="ghost">
             <Menu size={20} />
           </Button>
-          <Link className="topbar-brand" to={isSuperAdmin ? '/admin' : '/dashboard'}>
+          <Link className="topbar-brand" to="/landing">
             <AppLogo size="topbar" variant="full" />
           </Link>
         </div>
@@ -184,7 +194,7 @@ export function MainLayout() {
             <div className="content-scroll">
               <div className="content-inner">
                 <div className="breadcrumbs">
-                  <Link to={isSuperAdmin ? '/admin' : '/dashboard'}>Home</Link>
+                  <Link to="/landing">Home</Link>
                   <ChevronRight size={14} />
                   <span>{current.section}</span>
                   <ChevronRight size={14} />

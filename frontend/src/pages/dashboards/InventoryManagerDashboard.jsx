@@ -1,7 +1,7 @@
 import { AlertTriangle, ClipboardList, PackageSearch, ShieldAlert } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { ChartFilterBar } from '../../components/dashboard/ChartFilterBar.jsx';
 import { DashboardSkeleton } from '../../components/dashboard/DashboardSkeleton.jsx';
@@ -86,32 +86,36 @@ export function InventoryManagerDashboard() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
+        <Card className="chart-card dashboard-card-hover">
           <CardHeader className="space-y-3">
             <h2 className="text-lg font-semibold text-warelyn-text">Stock movements</h2>
             <ChartFilterBar onChange={setDays} options={[{ value: 7, label: '7d' }, { value: 30, label: '30d' }]} value={days} />
           </CardHeader>
           <CardBody>
-            <ResponsiveContainer height={260} width="100%">
-              <AreaChart data={movementRows}>
+            <div className="chart-shell">
+            <ResponsiveContainer height={280} width="100%">
+              <AreaChart data={movementRows} margin={{ top: 6, right: 14, left: 8, bottom: 10 }}>
                 <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickFormatter={(value) => String(value).slice(5)} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickFormatter={(value) => String(value).slice(5)} tickMargin={8} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} width={42} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
+                <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12, paddingBottom: 8 }} />
                 <Area dataKey="inbound" fill="#10b981" fillOpacity={0.2} stroke="#10b981" strokeWidth={2} type="monotone" />
                 <Area dataKey="outbound" fill="#ef4444" fillOpacity={0.2} stroke="#ef4444" strokeWidth={2} type="monotone" />
               </AreaChart>
             </ResponsiveContainer>
+            </div>
           </CardBody>
         </Card>
 
-        <Card>
+        <Card className="chart-card dashboard-card-hover">
           <CardHeader>
             <h2 className="text-lg font-semibold text-warelyn-text">Low stock by category</h2>
           </CardHeader>
           <CardBody>
             {(dashboard.charts?.low_stock_by_category || []).length ? (
-              <ResponsiveContainer height={260} width="100%">
+              <div className="chart-shell">
+              <ResponsiveContainer height={280} width="100%">
                 <PieChart>
                   <Pie
                     data={dashboard.charts.low_stock_by_category}
@@ -125,8 +129,10 @@ export function InventoryManagerDashboard() {
                     ))}
                   </Pie>
                   <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
+              </div>
             ) : (
               <EmptyState description="No low-stock category data yet." illustration={emptyStateIllustrations.overview} title="No low-stock categories" />
             )}

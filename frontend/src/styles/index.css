@@ -16,10 +16,14 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --shadow-card: 0 12px 30px rgba(15, 23, 42, 0.06);
+  --font-landing: Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-landing-display: "Space Grotesk", Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-ui-display: "Space Grotesk", Manrope, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sidebar: var(--font-ui-display);
   color: var(--color-text);
   background: var(--color-bg);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    Manrope, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -62,6 +66,11 @@ table td {
   vertical-align: top;
 }
 
+table td[data-type="numeric"],
+table th[data-type="numeric"] {
+  font-variant-numeric: tabular-nums;
+}
+
 tbody tr {
   transition: background-color 150ms ease;
 }
@@ -71,6 +80,10 @@ tbody tr:hover {
 }
 
 @layer components {
+  .font-display {
+    font-family: var(--font-ui-display);
+  }
+
   .app-logo {
     @apply inline-flex items-center justify-center shrink-0 overflow-hidden;
   }
@@ -128,7 +141,8 @@ tbody tr:hover {
   }
 
   .topbar {
-    @apply flex h-[62px] items-center justify-between gap-4 border-b border-slate-800 bg-slate-950 px-3 text-white shadow-lg shadow-slate-950/10 sm:px-4;
+    @apply flex h-[60px] items-center justify-between gap-4 border-b border-slate-800 bg-slate-950 px-3 text-white shadow-lg shadow-slate-950/10 sm:px-4;
+    font-family: var(--font-ui-display);
   }
 
   .topbar-left,
@@ -243,11 +257,12 @@ tbody tr:hover {
   }
 
   .sidebar {
-    @apply flex h-full w-[286px] flex-col border-r border-warelyn-border bg-white transition-all duration-200;
+    @apply flex h-full w-[268px] flex-col border-r border-warelyn-border bg-white transition-all duration-200;
+    font-family: var(--font-sidebar);
   }
 
   .sidebar.is-collapsed {
-    @apply w-[88px];
+    @apply w-[84px];
   }
 
   .sidebar-brand {
@@ -263,11 +278,11 @@ tbody tr:hover {
   }
 
   .sidebar-nav {
-    @apply flex-1 space-y-4 overflow-y-auto px-3 py-4;
+    @apply flex-1 space-y-3 overflow-y-auto px-2.5 py-3.5;
   }
 
   .sidebar-group-toggle {
-    @apply flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400 hover:bg-slate-50;
+    @apply flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.17em] text-slate-900 hover:bg-slate-50;
   }
 
   .sidebar-group-items {
@@ -279,15 +294,15 @@ tbody tr:hover {
   }
 
   .sidebar-nav-item {
-    @apply relative flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-warelyn-text;
+    @apply relative flex min-h-[40px] items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium text-slate-900 transition hover:bg-slate-50 hover:text-warelyn-text;
   }
 
   .sidebar-nav-item.is-active {
-    @apply bg-blue-50 font-semibold text-warelyn-primary shadow-[inset_3px_0_0_#1E3A8A];
+    @apply bg-blue-50 font-semibold text-warelyn-primary shadow-[inset_2px_0_0_#1E3A8A];
   }
 
   .sidebar-parent-item {
-    @apply relative flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-warelyn-text;
+    @apply relative flex min-h-[40px] w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-slate-900 transition hover:bg-slate-50 hover:text-warelyn-text;
   }
 
   .sidebar-parent-item.is-active {
@@ -299,7 +314,7 @@ tbody tr:hover {
   }
 
   .sidebar-nav-item-icon {
-    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl;
+    @apply inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg;
   }
 
   .sidebar-nav-item-dot {
@@ -307,11 +322,11 @@ tbody tr:hover {
   }
 
   .sidebar-subnav {
-    @apply ml-5 max-w-[190px] space-y-1 border-l border-slate-200 pl-2;
+    @apply ml-3.5 max-w-[172px] space-y-0.5 border-l border-slate-200 pl-1.5;
   }
 
   .sidebar-subnav-item {
-    @apply flex min-h-[34px] items-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-medium text-slate-500 transition hover:bg-slate-50 hover:text-warelyn-text;
+    @apply flex min-h-[30px] items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-slate-900 transition hover:bg-slate-50 hover:text-warelyn-text;
   }
 
   .sidebar-subnav-item.is-active {
@@ -375,11 +390,11 @@ tbody tr:hover {
   }
 
   .content-inner {
-    @apply mx-auto max-w-7xl px-4 py-4 sm:px-5 sm:py-5 lg:px-6;
+    @apply mx-auto max-w-7xl px-4 py-3.5 sm:px-5 sm:py-4 lg:px-6;
   }
 
   .breadcrumbs {
-    @apply mb-4 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-warelyn-muted;
+    @apply mb-3.5 flex flex-wrap items-center gap-1 text-[11px] font-semibold text-warelyn-muted;
   }
 
   .breadcrumbs a,
@@ -397,6 +412,7 @@ tbody tr:hover {
 
   .page-kicker {
     @apply text-xs font-bold uppercase tracking-[0.18em] text-warelyn-primary;
+    font-family: var(--font-ui-display);
   }
 
   .page-title-row {
@@ -404,7 +420,8 @@ tbody tr:hover {
   }
 
   .page-header h1 {
-    @apply text-2xl font-bold tracking-tight text-warelyn-text sm:text-3xl;
+    @apply text-2xl font-bold tracking-tight text-warelyn-text sm:text-2xl;
+    font-family: var(--font-ui-display);
   }
 
   .page-header p:not(.page-kicker) {
@@ -417,10 +434,11 @@ tbody tr:hover {
 
   .table-shell {
     @apply rounded-2xl border border-warelyn-border bg-white shadow-sm;
+    font-variant-numeric: tabular-nums;
   }
 
   .table-header {
-    @apply flex flex-col gap-3 border-b border-warelyn-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between;
+    @apply flex flex-col gap-2.5 border-b border-warelyn-border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between;
   }
 
   .table-title-row {
@@ -429,6 +447,7 @@ tbody tr:hover {
 
   .table-header h2 {
     @apply text-base font-bold text-warelyn-text;
+    font-family: var(--font-ui-display);
   }
 
   .table-row-count {
@@ -448,7 +467,15 @@ tbody tr:hover {
   }
 
   .table-toolbar {
-    @apply border-b border-warelyn-border px-5 py-4;
+    @apply border-b border-warelyn-border px-5 py-3;
+  }
+
+  .table-search-shell {
+    @apply border-b border-warelyn-border px-5 py-3;
+  }
+
+  .table-search-input {
+    @apply w-full rounded-xl border border-warelyn-border bg-white px-3.5 py-2.5 text-sm text-warelyn-text outline-none ring-0 transition placeholder:text-slate-400 focus:border-warelyn-primary focus:ring-4 focus:ring-blue-900/10;
   }
 
   .table-shell table {
@@ -473,7 +500,24 @@ tbody tr:hover {
 
   .table-shell th,
   .table-shell td {
-    @apply px-4 py-3;
+    @apply px-4 py-2.5;
+  }
+
+  .table-shell th {
+    @apply font-semibold;
+  }
+
+  .table-shell tbody tr {
+    @apply border-b border-warelyn-border last:border-b-0;
+  }
+
+  .table-shell tbody tr:hover {
+    @apply bg-slate-50/80;
+  }
+
+  .table-shell td.number-cell,
+  .table-shell th.number-cell {
+    @apply text-right tabular-nums;
   }
 
   .progress-steps {
@@ -517,15 +561,17 @@ tbody tr:hover {
   }
 
   .auth-panel {
-    @apply px-12 py-14 text-warelyn-text;
+    @apply px-12 py-12 text-warelyn-text;
   }
 
   .auth-eyebrow {
     @apply text-xs font-bold uppercase tracking-[0.18em] text-warelyn-primary;
+    font-family: var(--font-ui-display);
   }
 
   .auth-heading {
     @apply mt-4 max-w-xl text-4xl font-bold tracking-tight text-slate-950;
+    font-family: var(--font-ui-display);
   }
 
   .auth-copy {
@@ -565,15 +611,72 @@ tbody tr:hover {
   }
 
   .landing-page {
-    @apply min-h-screen bg-white text-warelyn-text;
+    @apply relative min-h-screen overflow-hidden bg-gradient-to-b from-white via-slate-50/40 to-white text-warelyn-text;
+  }
+
+  .landing-font {
+    font-family: var(--font-landing);
+  }
+
+  .landing-page h1,
+  .landing-page h2,
+  .landing-page h3,
+  .landing-page .landing-login-button,
+  .landing-page .landing-primary-cta,
+  .landing-page .landing-tagline,
+  .landing-page .landing-about-copy span,
+  .landing-page .landing-demo-url,
+  .landing-page .landing-demo-body .font-medium,
+  .landing-page .landing-demo-body .font-semibold,
+  .landing-page .landing-demo-body .font-bold,
+  .landing-page .landing-demo-body .uppercase {
+    font-family: var(--font-landing-display);
+  }
+
+  .landing-bg-canvas {
+    @apply pointer-events-none absolute inset-0 -z-0 overflow-hidden;
+    background-image: radial-gradient(rgba(30, 58, 138, 0.08) 1px, transparent 1px);
+    background-size: 26px 26px;
+    animation: driftGrid 22s linear infinite;
+  }
+
+  .landing-orb {
+    @apply absolute rounded-full blur-3xl opacity-30;
+    animation: floatOrb 12s ease-in-out infinite;
+  }
+
+  .landing-orb-one {
+    width: 320px;
+    height: 320px;
+    top: -80px;
+    left: -40px;
+    background: radial-gradient(circle, rgba(30, 58, 138, 0.24), rgba(30, 58, 138, 0));
+  }
+
+  .landing-orb-two {
+    width: 280px;
+    height: 280px;
+    top: 25%;
+    right: -40px;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0));
+    animation-delay: 2s;
+  }
+
+  .landing-orb-three {
+    width: 240px;
+    height: 240px;
+    bottom: -60px;
+    left: 36%;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.18), rgba(99, 102, 241, 0));
+    animation-delay: 4s;
   }
 
   .landing-nav-shell {
-    @apply border-b border-slate-200/80;
+    @apply relative z-10 border-b border-slate-200/80 bg-white/75 backdrop-blur;
   }
 
   .landing-nav {
-    @apply mx-auto flex max-w-[1120px] items-center justify-between px-5 py-3.5;
+    @apply mx-auto flex max-w-[1120px] items-center justify-between px-5 py-3;
   }
 
   .landing-brand {
@@ -581,7 +684,7 @@ tbody tr:hover {
   }
 
   .landing-links {
-    @apply flex items-center gap-6 text-sm font-medium text-slate-700;
+    @apply flex items-center gap-5 text-sm font-medium text-slate-700;
   }
 
   .landing-links a:hover {
@@ -589,11 +692,11 @@ tbody tr:hover {
   }
 
   .landing-login-button {
-    @apply inline-flex min-h-[40px] items-center justify-center rounded-none border border-warelyn-primary px-6 text-sm font-semibold text-warelyn-primary transition hover:bg-blue-50;
+    @apply inline-flex min-h-[38px] items-center justify-center rounded-xl border border-warelyn-primary px-5 text-sm font-semibold text-warelyn-primary transition hover:bg-blue-50;
   }
 
   .landing-main {
-    @apply mx-auto max-w-[1120px] px-5 pb-20 pt-12;
+    @apply relative z-10 mx-auto max-w-[1120px] px-5 pb-20 pt-12;
   }
 
   .landing-hero {
@@ -605,27 +708,30 @@ tbody tr:hover {
   }
 
   .landing-hero h1 {
-    @apply text-[3.2rem] font-black tracking-[0.06em] text-slate-900 sm:text-[4.4rem];
+    @apply text-[3.15rem] font-extrabold tracking-tight text-slate-900 sm:text-[4.6rem] lg:text-[5.2rem];
+    font-family: var(--font-landing-display);
   }
 
   .landing-hero p {
-    @apply mt-5 max-w-[640px] text-xl leading-9 text-slate-400;
+    @apply mt-5 max-w-[700px] text-base leading-7 text-slate-600 sm:text-lg;
+  }
+
+  .landing-tagline {
+    @apply mt-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-warelyn-primary;
+    font-family: var(--font-landing-display);
   }
 
   .landing-primary-cta {
-    @apply mt-10 min-w-[164px] rounded-none px-7 py-4 text-sm font-bold tracking-[0.14em];
+    @apply mt-9 min-w-[164px] rounded-xl px-7 py-3.5 text-sm font-bold tracking-[0.02em];
+    font-family: var(--font-landing-display);
   }
 
   .landing-feature-grid {
-    @apply mt-8 grid border border-warelyn-border md:grid-cols-3;
+    @apply mt-10 grid gap-4 md:grid-cols-3;
   }
 
   .landing-feature-card {
-    @apply border-b border-warelyn-border bg-white p-8 md:border-b-0 md:border-r;
-  }
-
-  .landing-feature-card:last-child {
-    @apply md:border-r-0;
+    @apply rounded-2xl border border-warelyn-border bg-white p-7 shadow-sm;
   }
 
   .landing-feature-icon {
@@ -633,11 +739,12 @@ tbody tr:hover {
   }
 
   .landing-feature-card h2 {
-    @apply text-[1.6rem] font-semibold text-slate-950;
+    @apply text-2xl font-semibold text-slate-950;
+    font-family: var(--font-landing-display);
   }
 
   .landing-feature-card p {
-    @apply mt-4 text-lg leading-9 text-slate-400;
+    @apply mt-3 text-sm leading-7 text-slate-600;
   }
 
   .landing-preview {
@@ -670,6 +777,7 @@ tbody tr:hover {
 
   .landing-about-copy span {
     @apply block text-xs font-bold uppercase tracking-[0.18em] text-warelyn-primary;
+    font-family: var(--font-landing-display);
   }
 
   .landing-about-copy p {
@@ -677,7 +785,61 @@ tbody tr:hover {
   }
 
   .landing-footer {
-    @apply mx-auto flex max-w-[1120px] flex-col gap-3 border-t border-slate-200/80 px-5 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between;
+    @apply relative z-10 mx-auto flex max-w-[1120px] flex-col gap-3 border-t border-slate-200/80 px-5 py-8 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .chart-card {
+    @apply overflow-hidden;
+  }
+
+  .chart-shell {
+    @apply rounded-xl border border-slate-100 bg-white p-2;
+  }
+
+  .dashboard-card-hover {
+    @apply transition duration-150 hover:-translate-y-0.5 hover:shadow-sm;
+  }
+
+  .landing-demo-frame {
+    @apply overflow-hidden rounded-xl border border-slate-200 bg-white;
+  }
+
+  .landing-demo-chrome {
+    @apply flex items-center gap-1.5 border-b border-slate-200 bg-slate-50 px-2 py-1;
+  }
+
+  .landing-demo-dot {
+    @apply h-2 w-2 rounded-full;
+  }
+
+  .landing-demo-url {
+    @apply ml-1 truncate text-[9px] font-medium text-slate-500;
+    font-family: var(--font-landing-display);
+  }
+
+  .landing-demo-body {
+    @apply bg-white;
+  }
+
+  .not-found-page {
+    @apply flex min-h-[68vh] flex-col items-center justify-center bg-white px-6 text-center text-slate-950;
+    font-family: var(--font-landing-display);
+  }
+
+  .not-found-illustration {
+    @apply mb-4 w-48 max-w-full;
+  }
+
+  .not-found-code {
+    @apply text-sm font-semibold tracking-[0.3em] text-slate-700;
+  }
+
+  .not-found-title {
+    @apply mt-2 text-3xl font-black text-slate-950;
+  }
+
+  .not-found-message {
+    @apply mt-3 max-w-xl text-sm leading-7 text-slate-700;
   }
 
   .landing-footer-brand {
@@ -922,10 +1084,12 @@ tbody tr:hover {
 
   .metric-link-card-label {
     @apply text-xs font-bold uppercase tracking-[0.18em] text-warelyn-muted;
+    font-family: var(--font-ui-display);
   }
 
   .metric-link-card-value {
     @apply mt-3 text-3xl font-bold tracking-tight text-warelyn-text;
+    font-family: var(--font-ui-display);
   }
 
   .metric-link-card-copy {
@@ -934,6 +1098,7 @@ tbody tr:hover {
 
   .metric-link-card-status {
     @apply mt-4 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+    font-family: var(--font-ui-display);
   }
 
   .metric-link-card-status.primary {
@@ -997,7 +1162,7 @@ tbody tr:hover {
   }
 
   .landing-hero h1 {
-    font-size: 2.9rem;
+    font-size: 3.25rem;
   }
 
   .landing-hero p {
@@ -1139,3 +1304,22 @@ tbody tr:hover {
 }
 
 [data-theme="dark"] [class*="shadow-card"] { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4); }
+
+@keyframes floatOrb {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -16px, 0) scale(1.05);
+  }
+}
+
+@keyframes driftGrid {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 90px 40px;
+  }
+}

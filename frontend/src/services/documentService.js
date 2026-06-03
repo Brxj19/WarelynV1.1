@@ -1,7 +1,7 @@
 import { apiRequest } from './apiClient.js';
 
 function downloadPath(path, accessToken) {
-  return fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001/api'}${path}`, {
+  return fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api'}${path}`, {
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   }).then(async (response) => {
     if (!response.ok) {
@@ -118,7 +118,7 @@ export function previewTemplate(accessToken, id, variables) {
 }
 
 export async function previewTemplatePdf(accessToken, id, variables = {}) {
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001/api';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
   const res = await fetch(`${API_BASE_URL}/document-templates/${id}/preview-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },

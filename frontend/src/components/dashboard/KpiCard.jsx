@@ -46,25 +46,32 @@ export function KpiCard({
   const trend = delta === null || Number.isNaN(Number(delta)) ? null : deltaMeta(Number(delta), deltaInvert);
 
   return (
-    <Link className="block" to={to}>
-      <article className="rounded-2xl border border-warelyn-border bg-white p-4 shadow-sm transition hover:shadow-md">
-        <div className="mb-2 flex items-start justify-between gap-2">
-          <div>
+    <Link className="block h-full" to={to}>
+      <article className="flex h-full min-h-[148px] flex-col rounded-2xl border border-warelyn-border bg-white p-4 shadow-sm transition hover:shadow-md">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-warelyn-muted">{label}</p>
             <p className="mt-1 text-2xl font-bold tracking-tight text-warelyn-text">{normalizeDisplayValue(value)}</p>
           </div>
           {Icon ? (
-            <span className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${toneClasses[tone] ?? toneClasses.primary}`}>
+            <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${toneClasses[tone] ?? toneClasses.primary}`}>
               <Icon size={18} />
             </span>
           ) : null}
         </div>
-        {trend ? (
-          <p className={`text-xs font-semibold ${trend.className}`}>
-            {trend.arrow} {trend.value}% <span className="font-medium text-warelyn-muted">vs previous period</span>
-          </p>
-        ) : null}
-        {helper ? <p className="mt-1 text-xs text-warelyn-muted">{helper}</p> : null}
+        <div className="mt-auto min-h-[2.5rem] pt-3">
+          {trend ? (
+            <p className={`text-xs font-semibold ${trend.className}`}>
+              {trend.arrow} {trend.value}% <span className="font-medium text-warelyn-muted">vs previous period</span>
+            </p>
+          ) : helper ? (
+            <p className="text-xs text-warelyn-muted">{helper}</p>
+          ) : (
+            <span className="block text-xs opacity-0" aria-hidden="true">
+              —
+            </span>
+          )}
+        </div>
       </article>
     </Link>
   );

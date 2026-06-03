@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, ChevronLeft, ExternalLink, FileText, MessageSquare, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2 } from 'lucide-react';
+import { Bot, ChevronDown, ChevronLeft, ExternalLink, FileText, MessageSquare, Plus, Send, Sparkles, ThumbsDown, ThumbsUp, Trash2, UserCircle2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -44,10 +44,15 @@ export function AdminAICopilotPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
+
+  useEffect(() => {
+    if (!loading) inputRef.current?.focus();
+  }, [loading]);
 
   async function loadSessions() {
     try {
@@ -357,9 +362,12 @@ export function AdminAICopilotPage() {
                       </div>
                     </div>
                   ) : (
-                    <div key={message.id} className="flex justify-end">
-                      <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-warelyn-primary text-white px-4 py-2.5 text-sm leading-relaxed">
-                        {message.content}
+                    <div key={message.id} className="flex items-start justify-end gap-2.5">
+                      <div className="max-w-[78%] rounded-2xl rounded-br-sm bg-warelyn-primary text-white px-4 py-2.5 text-sm leading-relaxed shadow-sm">
+                        <p>{message.content}</p>
+                      </div>
+                      <div className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-100 text-warelyn-primary">
+                        <UserCircle2 size={14} />
                       </div>
                     </div>
                   )
@@ -397,6 +405,7 @@ export function AdminAICopilotPage() {
             <div className="flex items-center gap-2 border border-warelyn-border rounded-full px-3 py-2 bg-white focus-within:border-warelyn-primary transition-colors">
               <Sparkles size={15} className="text-warelyn-primary flex-shrink-0" />
               <input
+                ref={inputRef}
                 type="text"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}

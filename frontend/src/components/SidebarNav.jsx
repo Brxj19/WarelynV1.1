@@ -34,7 +34,7 @@ export function SidebarNav({ collapsed, mobile = false, onCollapse, onNavigate, 
   const location = useLocation();
   const visibleGroups = useMemo(() => getVisibleNavGroups(userRole), [userRole]);
   const [openParent, setOpenParent] = useState(() => activeParentFor(location.pathname, visibleGroups));
-  const brandTarget = userRole === 'SUPER_ADMIN' ? '/admin' : '/dashboard';
+  const brandTarget = '/landing';
   const taskCount = useMyTaskCount();
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { ExternalLink, Send, Sparkles, X } from 'lucide-react';
+import { ExternalLink, Send, Sparkles, UserCircle2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -56,6 +56,7 @@ export function FaqChatWidget() {
   });
   const widgetBottomRef = useRef(null);
   const panelRef = useRef(null);
+  const inputRef = useRef(null);
   const dragRef = useRef(null);
 
   const savedPos = loadPos();
@@ -97,6 +98,10 @@ export function FaqChatWidget() {
   }, [messages, asking]);
 
   useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function onMouseMove(e) {
       if (dragging.current) {
@@ -107,8 +112,8 @@ export function FaqChatWidget() {
         setPos({ right: newRight, bottom: newBottom });
       }
       if (resizing.current) {
-        const dx = e.clientX - resizeStart.current.x;
-        const dy = e.clientY - resizeStart.current.y;
+        const dx = resizeStart.current.x - e.clientX;
+        const dy = resizeStart.current.y - e.clientY;
         const newW = Math.max(MIN_W, resizeStart.current.size.width + dx);
         const newH = Math.max(MIN_H, resizeStart.current.size.height + dy);
         setSize({ width: newW, height: newH });
@@ -153,7 +158,7 @@ export function FaqChatWidget() {
   }
 
   function handlePopout() {
-    window.open('/faq', '_blank', 'noopener,noreferrer');
+    window.open(`${window.location.origin}/faq`, '_blank', 'noopener,noreferrer');
   }
 
   if (!canUseFaq) return null;
@@ -258,13 +263,23 @@ export function FaqChatWidget() {
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
-                    className={`rounded-lg px-3 py-2 text-xs ${
+                    className={`flex items-start gap-2 ${
+                      message.role === 'USER'
+                        ? 'justify-end'
+                        : 'justify-start'
+                    }`}
+                  >
+                    {message.role !== 'USER' ? (
+                      <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                        <Sparkles size={10} />
+                      </span>
+                    ) : null}
+                    <div className={`rounded-lg px-3 py-2 text-xs ${
                       message.role === 'USER'
                         ? 'ml-8 bg-warelyn-primary text-white'
                         : 'mr-8 border border-warelyn-border bg-slate-50 text-warelyn-text'
-                    }`}
-                  >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    }`}>
+                      <p className="whitespace-pre-wrap">{message.content}</p>
                     {message.role === 'ASSISTANT' && message.payload?.confidence ? (
                       <div className="mt-2">
                         <Badge tone={confidenceTone(message.payload.confidence)}>{message.payload.confidence}</Badge>
@@ -282,6 +297,12 @@ export function FaqChatWidget() {
                           </Link>
                         ))}
                       </div>
+                    ) : null}
+                    </div>
+                    {message.role === 'USER' ? (
+                      <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-warelyn-primary">
+                        <UserCircle2 size={10} />
+                      </span>
                     ) : null}
                   </div>
                 ))}
@@ -313,6 +334,7 @@ export function FaqChatWidget() {
           <div className="border-t border-warelyn-border p-3 flex-shrink-0">
             <div className="flex items-center gap-2">
               <input
+                ref={inputRef}
                 type="text"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
@@ -338,12 +360,16 @@ export function FaqChatWidget() {
           </div>
 
           <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize hover:bg-warelyn-primary/10 rounded-bl-lg"
+            className="absolute left-0 top-0 z-10 h-5 w-5 cursor-nwse-resize rounded-br-lg bg-white/80 text-warelyn-muted transition hover:bg-blue-50 hover:text-warelyn-primary"
             onMouseDown={onResizeDown}
+            aria-label="Resize FAQ chat"
+            role="button"
+            tabIndex={0}
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" className="absolute bottom-0.5 right-0.5 text-warelyn-muted">
-              <line x1="2" y1="10" x2="10" y2="2" stroke="currentColor" strokeWidth="1.5" />
-              <line x1="5" y1="10" x2="10" y2="5" stroke="currentColor" strokeWidth="1.5" />
+            <svg width="12" height="12" viewBox="0 0 12 12" className="absolute left-1 top-1">
+              <line x1="1" y1="9" x2="9" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <line x1="1" y1="5" x2="5" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <line x1="5" y1="11" x2="11" y2="5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
         </div>

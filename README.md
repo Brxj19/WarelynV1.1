@@ -49,8 +49,9 @@ The current implementation provides:
   - In-app notification model, service, and API.
   - Frontend toast notification system (success/error/warning/info).
   - Frontend notification center with bell icon and unread badge.
-  - Frontend verification pages and settings integration.
-  - MailHog SMTP service in Docker Compose for local email development.
+- Frontend verification pages and settings integration.
+- MailHog SMTP service in Docker Compose for local email development.
+- FAQ assistant popup plus standalone `/faq` page for tenant users.
 - MySQL, backend, and frontend development services in Docker Compose.
 
 Not implemented yet:
@@ -116,6 +117,8 @@ Before adding later workflows, keep tenant context backend-derived from authenti
 
 ## Local Setup
 
+For step-by-step local and Docker instructions, see [runbook.md](./runbook.md).
+
 Prerequisites:
 
 - Python 3.11+
@@ -163,7 +166,7 @@ Deployment readiness notes are in `docs/DEPLOYMENT_READINESS.md`. `docker-compos
 Health check:
 
 ```bash
-curl http://localhost:8001/api/health
+curl http://localhost:8000/api/health
 ```
 
 Expected response:
@@ -309,7 +312,7 @@ docker compose down
 Development URLs:
 
 - Frontend: `http://localhost:5173`
-- Backend API: `http://localhost:8001`
+- Backend API: `http://localhost:8000`
 - MySQL: `localhost:3306`
 - MailHog: `http://localhost:8025` (dev email viewer)
 

@@ -74,13 +74,10 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
   const { currency } = useTenantSettings();
   const [data, setData] = useState(null);
   const [query, setQuery] = useState({});
-  const [search, setSearch] = useState('');
   const [sortState, setSortState] = useState(() => ({
     key: columns[0]?.key ?? '',
     direction: 'asc',
   }));
-  const [pageSize, setPageSize] = useState(10);
-  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -106,20 +103,10 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
       ? loadRows(data)
       : data;
   const normalizedRows = Array.isArray(sourceRows) ? sourceRows.map(normalize) : [];
-  const rows = useMemo(() => {
-    const value = search.trim().toLowerCase();
-    if (!value) return normalizedRows;
-    return normalizedRows.filter((row) =>
-      columns.some((column) => {
-        const raw = row[column.key];
-        return raw !== null && raw !== undefined && String(raw).toLowerCase().includes(value);
-      }),
-    );
-  }, [columns, normalizedRows, search]);
   const sortedRows = useMemo(
     () =>
       sortRows(
-        rows,
+        normalizedRows,
         sortState,
         Object.fromEntries(
           columns.map((column) => [
@@ -131,19 +118,9 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
           ]),
         ),
       ),
-    [columns, rows, sortState],
+    [columns, normalizedRows, sortState],
   );
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, query, sortState, pageSize, normalizedRows.length]);
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
-  const pagedRows = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return sortedRows.slice(start, start + pageSize);
-  }, [pageSize, safePage, sortedRows]);
   const activeFilters = [
-    search ? { key: 'search', label: `Search: ${search}`, onRemove: () => setSearch('') } : null,
     ...filters
       .map((filter) => {
         const value = query[filter.key];
@@ -228,7 +205,7 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
                 )
               )}
               {hasActiveFilters && (
-                <Button variant="ghost" onClick={() => { setQuery({}); setSearch(''); }}>
+                <Button variant="ghost" onClick={() => { setQuery({}); }}>
                   Clear filters
                 </Button>
               )}
@@ -248,25 +225,11 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
         error={error}
         isEmpty={sortedRows.length === 0}
         isLoading={isLoading}
-        onEmptySecondaryAction={hasActiveFilters ? () => { setQuery({}); setSearch(''); } : undefined}
+        onEmptySecondaryAction={hasActiveFilters ? () => { setQuery({}); } : undefined}
+        filterable={false}
         rowCount={sortedRows.length}
         title="Results"
-        toolbar={
-          <ScreenToolbar
-            activeFilters={activeFilters}
-            onReset={
-              hasActiveFilters
-                ? () => {
-                    setQuery({});
-                    setSearch('');
-                  }
-                : undefined
-            }
-            onSearchChange={setSearch}
-            searchPlaceholder="Search rows"
-            searchValue={search}
-          />
-        }
+        toolbar={hasActiveFilters ? <ScreenToolbar activeFilters={activeFilters} onReset={() => setQuery({})} /> : null}
       >
         <table>
           <thead>
@@ -288,7 +251,7 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
             </tr>
           </thead>
           <tbody>
-            {pagedRows.map((row, index) => (
+            {sortedRows.map((row, index) => (
               <tr key={row.id ?? index}>
                 {columns.map((column) => (
                   <td className={(column.numeric ?? inferSortType(column.key) === 'number') ? 'number-cell whitespace-nowrap' : 'whitespace-nowrap'} key={column.key}>
@@ -300,43 +263,6 @@ export function SimpleReportPage({ columns, description, filters = [], load, loa
           </tbody>
         </table>
       </TableShell>
-      {sortedRows.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warelyn-border bg-white px-4 py-3">
-          <p className="text-xs text-warelyn-muted">
-            Showing {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, sortedRows.length)} of {sortedRows.length}
-          </p>
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-warelyn-muted" htmlFor="report-page-size">Rows</label>
-            <select
-              id="report-page-size"
-              className="rounded-lg border border-warelyn-border bg-white px-2 py-1.5 text-xs text-warelyn-text"
-              onChange={(event) => setPageSize(Number(event.target.value))}
-              value={pageSize}
-            >
-              {[10, 25, 50, 100].map((size) => (
-                <option key={size} value={size}>{size}</option>
-              ))}
-            </select>
-            <button
-              className="rounded-lg border border-warelyn-border px-3 py-1.5 text-xs font-semibold text-warelyn-text disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={safePage <= 1}
-              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              type="button"
-            >
-              Prev
-            </button>
-            <span className="text-xs font-medium text-warelyn-muted">Page {safePage} / {totalPages}</span>
-            <button
-              className="rounded-lg border border-warelyn-border px-3 py-1.5 text-xs font-semibold text-warelyn-text disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={safePage >= totalPages}
-              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-              type="button"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

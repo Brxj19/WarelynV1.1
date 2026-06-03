@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody } from '../components/ui/Card.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 import { PhoneInput } from '../components/ui/PhoneInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { isValidPhone, parsePhone } from '../lib/phone.js';
@@ -80,15 +81,23 @@ export function RegisterPage() {
           <p className="mt-2 text-sm leading-6 text-warelyn-muted">Set up the tenant workspace and first admin account for your operations team.</p>
         </div>
 
-        {error ? <ErrorState description={error} title="Registration failed" /> : null}
-        {success ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{success}</div> : null}
+        {error ? <div className="mb-4"><ErrorState description={error} title="Registration failed" /></div> : null}
+        {success ? <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">{success}</div> : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <Input id="company_name" label="Company name" onChange={updateField('company_name')} placeholder="Acme Warehousing" value={values.company_name} />
           <Input id="name" label="Admin name" onChange={updateField('name')} placeholder="Jane Operator" value={values.name} />
           <Input autoComplete="email" id="email" label="Admin email" onChange={updateField('email')} placeholder="admin@example.com" type="email" value={values.email} />
           <PhoneInput label="Phone (optional)" value={values.phone} onChange={(val) => setValues((current) => ({ ...current, phone: val }))} />
-          <Input autoComplete="new-password" id="password" label="Password" onChange={updateField('password')} placeholder="Minimum 8 characters" type="password" value={values.password} />
+          <PasswordInput
+            autoComplete="new-password"
+            id="password"
+            label="Password"
+            minLength={8}
+            onChange={updateField('password')}
+            placeholder="Minimum 8 characters"
+            value={values.password}
+          />
           <Button className="w-full" isLoading={isSubmitting} type="submit">
             {isSubmitting ? 'Creating workspace...' : 'Create workspace'}
           </Button>

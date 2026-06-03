@@ -132,9 +132,9 @@ export function TableShell({
       </div>
       {toolbar ? <div className="table-toolbar">{toolbar}</div> : null}
       {filterable && !isLoading && !error && !isEmpty ? (
-        <div className="mb-3 flex items-center gap-2">
+        <div className="table-search-shell">
           <input
-            className="w-full rounded-lg border border-warelyn-border bg-white px-3 py-2 text-sm text-warelyn-text outline-none ring-0 placeholder:text-warelyn-muted focus:border-warelyn-primary"
+            className="table-search-input"
             onChange={(event) => setQuery(event.target.value)}
             placeholder={filterPlaceholder}
             value={query}

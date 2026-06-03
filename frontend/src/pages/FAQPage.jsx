@@ -1,5 +1,5 @@
 import { ExternalLink, FileText, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '../components/ui/Badge.jsx';
@@ -42,6 +42,7 @@ export function FAQPage() {
   const [loading, setLoading] = useState(true);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState('');
+  const inputRef = useRef(null);
 
   useEffect(() => {
     faqService.getFaqSuggestions(accessToken)
@@ -49,6 +50,10 @@ export function FAQPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [accessToken]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     try {
@@ -114,6 +119,7 @@ export function FAQPage() {
         </CardHeader>
         <CardBody className="space-y-3">
           <Input
+            ref={inputRef}
             label="Question"
             placeholder="e.g., Why is my order still pending fulfillment?"
             value={question}

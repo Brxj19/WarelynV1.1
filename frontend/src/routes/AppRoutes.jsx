@@ -103,10 +103,11 @@ export function AppRoutes() {
     <Suspense fallback={<AppLoader />}>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
+        <Route path="landing" element={<LandingPage />} />
         <Route element={<ProtectedRoute />}>
+          <Route path="faq" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF', 'VIEWER']}><FAQPage /></RoleGuard>} />
           <Route element={<MainLayout />}>
             <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="faq" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF', 'VIEWER']}><FAQPage /></RoleGuard>} />
             <Route path="assistant-copilot" element={<RoleGuard allowedRoles={['TENANT_ADMIN']}><AdminAICopilotPage /></RoleGuard>} />
             <Route path="my-tasks" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER', 'SALES_STAFF', 'PURCHASE_STAFF']}><MyTasksPage /></RoleGuard>} />
             <Route path="catalog" element={<CatalogPage />} />
@@ -180,7 +181,6 @@ export function AppRoutes() {
             <Route path="settings/pdf-templates" element={<RoleGuard allowedRoles={['TENANT_ADMIN', 'INVENTORY_MANAGER']}><PdfTemplatesPage /></RoleGuard>} />
             <Route path="verify-email" element={<VerifyEmailPage />} />
             <Route path="verify-phone" element={<VerifyPhonePage />} />
-            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>
         <Route element={<ProtectedRoute requiredRole="SUPER_ADMIN" />}>
@@ -200,6 +200,7 @@ export function AppRoutes() {
           </Route>
         </Route>
         <Route path="/auth" element={<Navigate replace to="/login" />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   );

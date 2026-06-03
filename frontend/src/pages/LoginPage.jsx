@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody } from '../components/ui/Card.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 function validate(values) {
@@ -67,15 +68,22 @@ export function LoginPage() {
         </div>
 
         {successMessage ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
+          <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
             {successMessage}
           </div>
         ) : null}
-        {error ? <ErrorState description={error} title="Sign in failed" /> : null}
+        {error ? <div className="mb-4"><ErrorState description={error} title="Sign in failed" /></div> : null}
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <Input autoComplete="email" id="email" label="Email" onChange={updateField('email')} placeholder="you@example.com" type="email" value={values.email} />
-          <Input autoComplete="current-password" id="password" label="Password" onChange={updateField('password')} placeholder="Password" type="password" value={values.password} />
+          <PasswordInput
+            autoComplete="current-password"
+            id="password"
+            label="Password"
+            onChange={updateField('password')}
+            placeholder="Password"
+            value={values.password}
+          />
           <div className="text-right">
             <Link className="text-xs text-warelyn-primary hover:underline" to="/forgot-password">
               Forgot password?

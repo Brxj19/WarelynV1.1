@@ -70,8 +70,8 @@ export function EmptyState({
             <Icon className="text-warelyn-primary" size={18} />
           </div>
         )}
-        <h3 className="text-base font-semibold text-warelyn-text">{title}</h3>
-        {displayMessage && <p className="mx-auto mt-2 max-w-md text-sm text-warelyn-muted">{displayMessage}</p>}
+        <h3 className="font-display text-base font-semibold text-warelyn-text">{title}</h3>
+        {displayMessage && <p className="font-display mx-auto mt-2 max-w-md text-sm text-warelyn-muted">{displayMessage}</p>}
         {action ? <div className="mt-5">{action}</div> : null}
         {(actionLabel || secondaryActionLabel) && (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
@@ -100,11 +100,11 @@ export function EmptyState({
           className={`${s.img} max-w-full`}
         />
       )}
-      <h3 className={`${s.title} font-bold tracking-tight text-warelyn-text`}>
+      <h3 className={`font-display ${s.title} font-bold tracking-tight text-warelyn-text`}>
         {title}
       </h3>
       {displayMessage && (
-        <p className={`${s.message} max-w-md leading-7 text-warelyn-muted`}>
+        <p className={`font-display ${s.message} max-w-md leading-7 text-warelyn-muted`}>
           {displayMessage}
         </p>
       )}

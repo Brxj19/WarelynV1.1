@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     smtp_port: int = 1025
     smtp_username: str = ""
     smtp_password: str = ""
-    smtp_from_email: str = "no-reply@warelyn.local"
+    smtp_from_email: str = "no-reply@warelyn.dev"
     smtp_from_name: str = "Warelyn"
     smtp_use_tls: bool = False
     smtp_use_ssl: bool = False

@@ -48,7 +48,7 @@ const statusIcons = {
 };
 
 export function Badge({ children, className = '', tone = 'neutral' }) {
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${tones[tone] ?? tones.neutral} ${className}`}>{children}</span>;
+  return <span className={`font-display inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${tones[tone] ?? tones.neutral} ${className}`}>{children}</span>;
 }
 
 export function StatusBadge({ children, status, className = '' }) {

@@ -104,7 +104,7 @@ export function ProductImportPage() {
             <button
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-warelyn-border bg-white px-4 py-2.5 text-sm font-semibold text-warelyn-text transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-300"
               onClick={async () => {
-                const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001/api';
+                const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
                 const res = await fetch(`${baseUrl}/imports/products/template.xlsx`, {
                   headers: { Authorization: `Bearer ${accessToken}` },
                 });

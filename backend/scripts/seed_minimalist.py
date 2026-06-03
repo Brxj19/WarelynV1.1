@@ -50,6 +50,9 @@ from app.services.sales import SalesService
 
 
 SEED_TAG = "ENGINE-SEED-2026Q2"
+MINIMALIST_TENANT_NAME = "Minimalist"
+MINIMALIST_ADMIN_EMAIL = "admin@minimalist.com"
+MINIMALIST_ADMIN_PASSWORD = "ChangeMe123!"
 
 
 def as_decimal(value: Any) -> Decimal:
@@ -57,11 +60,40 @@ def as_decimal(value: Any) -> Decimal:
 
 
 def get_tenant_and_admin(db: Session):
-    admin = db.query(User).filter(User.email == "admin@minimalist.com").first()
-    if not admin:
-        print("ERROR: admin@minimalist.com not found. Register the tenant first via the app.")
-        sys.exit(1)
-    tenant = db.query(Tenant).filter(Tenant.id == admin.tenant_id).first()
+    tenant = db.query(Tenant).filter(Tenant.company_name == MINIMALIST_TENANT_NAME).order_by(Tenant.id.asc()).first()
+    admin = db.query(User).filter(User.email == MINIMALIST_ADMIN_EMAIL).first()
+
+    if tenant is None and admin and admin.tenant_id:
+        tenant = db.query(Tenant).filter(Tenant.id == admin.tenant_id).first()
+
+    if tenant is None:
+        tenant = Tenant(
+            company_name=MINIMALIST_TENANT_NAME,
+            contact_email=MINIMALIST_ADMIN_EMAIL,
+            phone="+91-90000-00001",
+            address="Minimalist HQ, Mumbai, Maharashtra, India",
+            business_type="Beauty & Personal Care",
+            status=TenantStatus.ACTIVE,
+        )
+        db.add(tenant)
+        db.flush()
+
+    if admin is None:
+        admin = User(
+            tenant_id=tenant.id,
+            name="Minimalist Admin",
+            email=MINIMALIST_ADMIN_EMAIL,
+            phone="+91-90000-00002",
+            password_hash=get_password_hash(MINIMALIST_ADMIN_PASSWORD),
+            role=UserRole.TENANT_ADMIN,
+            status=UserStatus.ACTIVE,
+        )
+        db.add(admin)
+        db.flush()
+    elif admin.tenant_id != tenant.id:
+        admin.tenant_id = tenant.id
+        db.flush()
+
     return tenant, admin
 
 

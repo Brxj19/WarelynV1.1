@@ -10,6 +10,12 @@ export class ErrorBoundary extends Component {
     return { hasError: true };
   }
 
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false });
+    }
+  }
+
   componentDidCatch(error, info) {
     console.error('ErrorBoundary caught:', error, info);
   }
@@ -24,12 +30,12 @@ export class ErrorBoundary extends Component {
               <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="white" fontSize="14" fontWeight="bold">W</text>
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-slate-800">Something went wrong</h1>
-          <p className="mt-2 max-w-sm text-sm text-slate-500">
+          <h1 className="font-display text-xl font-bold text-slate-800">Something went wrong</h1>
+          <p className="font-display mt-2 max-w-sm text-sm text-slate-500">
             An unexpected error occurred. Please refresh the page to continue.
           </p>
           <button
-            className="mt-6 rounded-xl bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
+            className="font-display mt-6 rounded-xl bg-blue-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
             onClick={() => window.location.reload()}
             type="button"
           >

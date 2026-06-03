@@ -5,6 +5,7 @@ import { Badge } from '../components/ui/Badge.jsx';
 import { Button } from '../components/ui/Button.jsx';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { Input } from '../components/ui/Input.jsx';
+import { PasswordInput } from '../components/ui/PasswordInput.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { PhoneInput } from '../components/ui/PhoneInput.jsx';
 import { TableShell } from '../components/ui/TableShell.jsx';
@@ -13,6 +14,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../hooks/useToast.jsx';
 import { isValidPhone, normalizePhone, parsePhone, stripNonDigits } from '../lib/phone.js';
 import * as userService from '../services/userService.js';
+import { formatDateTime } from '../utils/formatters.js';
 
 const ROLES = [
   { value: 'TENANT_ADMIN', label: 'Tenant Admin' },
@@ -356,7 +358,7 @@ export function UsersPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-warelyn-muted">
-                    {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
+                    {user.last_login_at ? formatDateTime(user.last_login_at) : 'Never'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
@@ -444,10 +446,11 @@ export function UsersPage() {
           onChange={(val) => setCreateForm((f) => ({ ...f, role: val }))}
           options={ROLES}
         />
-        <Input
+        <PasswordInput
           label="Password"
           id="create-password"
-          type="password"
+          autoComplete="new-password"
+          minLength={8}
           value={createForm.password}
           onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
           error={createErrors.password}
