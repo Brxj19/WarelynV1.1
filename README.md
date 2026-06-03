@@ -52,7 +52,7 @@ The current implementation provides:
 - Frontend verification pages and settings integration.
 - MailHog SMTP service in Docker Compose for local email development.
 - FAQ assistant popup plus standalone `/faq` page for tenant users.
-- MySQL, backend, and frontend development services in Docker Compose.
+- PostgreSQL, backend, and frontend development services in Docker Compose with startup seeding for the D-Mart demo tenant.
 
 Not implemented yet:
 
@@ -76,7 +76,7 @@ Before adding later workflows, keep tenant context backend-derived from authenti
 
 - Frontend: React, Vite, Tailwind CSS.
 - Backend: Python, FastAPI, Pydantic Settings.
-- Database: MySQL.
+- Database: MySQL for local installs, PostgreSQL in Docker Compose.
 - ORM and migrations: SQLAlchemy, Alembic.
 - Tests: Pytest.
 - Local orchestration: Docker Compose.
@@ -151,7 +151,7 @@ cd backend
 .venv/bin/python -m compileall app
 .venv/bin/python -m pytest
 .venv/bin/alembic upgrade head
-.venv/bin/python -m app.utils.seed_super_admin
+.venv/bin/python scripts/seed_dmart.py
 .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 

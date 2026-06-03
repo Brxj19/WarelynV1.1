@@ -1,19 +1,18 @@
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: warelyn-mysql
+  postgres:
+    image: postgres:16
+    container_name: warelyn-postgres
     environment:
-      MYSQL_DATABASE: warelyn_inventoryV1
-      MYSQL_USER: warelyn
-      MYSQL_PASSWORD: warelyn_dev_password
-      MYSQL_ROOT_PASSWORD: root_dev_password
+      POSTGRES_DB: warelyn_dev
+      POSTGRES_USER: warelyn
+      POSTGRES_PASSWORD: warelyn_secret
     ports:
-      - "3307:3306"
+      - "5433:5432"
     volumes:
-      - mysql-data:/var/lib/mysql
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_dev_password"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
       timeout: 5s
       retries: 10
 
@@ -24,21 +23,38 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  mongodb:
+    image: mongo:7
+    container_name: warelyn-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: warelyn-backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: sh -c "cd /app && python -m alembic upgrade head && python scripts/seed_dmart.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       WARELYN_ENVIRONMENT: development
-      WARELYN_DATABASE_URL: mysql+pymysql://warelyn:warelyn_dev_password@mysql:3306/warelyn_inventoryV1
+      WARELYN_DATABASE_URL: postgresql+psycopg://warelyn:warelyn_secret@postgres:5432/warelyn_dev
       WARELYN_CORS_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
       WARELYN_JWT_SECRET_KEY: replace-with-a-long-random-secret
-      WARELYN_SUPER_ADMIN_EMAIL: admin@warelyn.dev
-      WARELYN_SUPER_ADMIN_PASSWORD: ChangeMe123!
+      WARELYN_SUPER_ADMIN_EMAIL: superadmin@warelyn.dev
+      WARELYN_SUPER_ADMIN_PASSWORD: Admin@1234
       WARELYN_SUPER_ADMIN_NAME: Warelyn Super Admin
       WARELYN_SEED_SUPER_ADMIN_ON_STARTUP: "true"
+      SEED_ON_STARTUP: "true"
+      POSTGRES_DB: warelyn_dev
+      POSTGRES_USER: warelyn
+      POSTGRES_PASSWORD: warelyn_secret
       WARELYN_SMTP_HOST: mailhog
       WARELYN_SMTP_PORT: "1025"
       WARELYN_SMTP_USERNAME: ""
@@ -55,57 +71,10 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       mongodb:
         condition: service_healthy
-
-  ikea-seed:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: warelyn-ikea-seed
-    command: python scripts/seed_ikea.py
-    working_dir: /app
-    environment:
-      WARELYN_DATABASE_URL: mysql+pymysql://warelyn:warelyn_dev_password@mysql:3306/warelyn_inventoryV1
-      WARELYN_JWT_SECRET_KEY: replace-with-a-long-random-secret
-      WARELYN_SUPER_ADMIN_EMAIL: admin@warelyn.dev
-      WARELYN_SUPER_ADMIN_PASSWORD: ChangeMe123!
-      WARELYN_SUPER_ADMIN_NAME: Warelyn Super Admin
-      WARELYN_SMTP_HOST: mailhog
-      WARELYN_SMTP_PORT: "1025"
-      WARELYN_SMTP_USERNAME: ""
-      WARELYN_SMTP_PASSWORD: ""
-      WARELYN_SMTP_FROM_EMAIL: no-reply@warelyn.dev
-      WARELYN_SMTP_FROM_NAME: Warelyn
-      WARELYN_SMTP_USE_TLS: "false"
-      WARELYN_SMTP_USE_SSL: "false"
-      WARELYN_MONGO_URI: mongodb://mongodb:27017/
-      WARELYN_MONGO_DB_NAME: warelyn_assistant
-      WARELYN_EMAIL_DELIVERY_MODE: mailhog
-    volumes:
-      - ./backend:/app
-    depends_on:
-      mysql:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-    profiles:
-      - seed
-
-  mongodb:
-    image: mongo:7
-    container_name: warelyn-mongo
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   frontend:
     image: node:20-alpine
@@ -123,6 +92,6 @@ services:
       - backend
 
 volumes:
-  mysql-data:
+  pgdata:
   mongo-data:
   frontend-node-modules:

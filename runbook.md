@@ -22,22 +22,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 .venv/bin/alembic upgrade head
-.venv/bin/python -m app.utils.seed_super_admin
+.venv/bin/python scripts/seed_dmart.py
 .venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-If you want the Minimalist tenant demo data, run:
+If you want the D-Mart tenant demo data in a local run, the backend seed command is:
 
 ```bash
 cd backend
-.venv/bin/python scripts/seed_minimalist.py
-```
-
-If you also want the IKEA tenant demo data, run:
-
-```bash
-cd backend
-.venv/bin/python scripts/seed_ikea.py
+.venv/bin/python scripts/seed_dmart.py
 ```
 
 ### Frontend
@@ -55,7 +48,7 @@ The frontend expects the backend at `http://localhost:8000/api`.
 
 Docker Compose brings up:
 
-- MySQL on `localhost:3307` to avoid colliding with a local MySQL install
+- PostgreSQL on `localhost:5433` to avoid colliding with a local Postgres install
 - MongoDB on `localhost:27017`
 - MailHog on `http://localhost:8025`
 - Backend on `http://localhost:8000`
@@ -82,17 +75,11 @@ docker compose down -v --remove-orphans
 docker compose up --build -d
 ```
 
-Then seed the data in a second terminal:
-
-```bash
-docker compose --profile seed run --rm ikea-seed
-```
-
-If you also want the Minimalist demo tenant seeded manually from the host:
+The backend container runs the D-Mart seed automatically on startup. If you want to run it manually from the host:
 
 ```bash
 cd backend
-.venv/bin/python scripts/seed_minimalist.py
+.venv/bin/python scripts/seed_dmart.py
 ```
 
 If you only want to delete the old containers but keep the existing database data:
@@ -104,19 +91,13 @@ docker compose up --build -d
 
 ### Docker seed data
 
-If you want the Minimalist tenant demo data after the stack is up:
+If you want the D-Mart tenant demo data after the stack is up:
 
 ```bash
-docker compose exec backend python scripts/seed_minimalist.py
+docker compose exec backend python scripts/seed_dmart.py
 ```
 
-If you want the IKEA tenant demo data after the stack is up:
-
-```bash
-docker compose --profile seed run --rm ikea-seed
-```
-
-The IKEA seed creates the `IKEA` tenant, products with batch/expiry/serial tracking, and a full set of purchase, sales, return, and cycle count workflows using the shared password `Ikea@12345` for the tenant users.
+The D-Mart seed creates the `D-Mart Wholesale Pvt Ltd` tenant, realistic multi-category products, batch/expiry/serial tracking, purchase/sales/return workflows, and a set of seeded workflow tasks and notifications using the shared password `Admin@1234` for tenant users.
 
 ## 4. MailHog guide
 
