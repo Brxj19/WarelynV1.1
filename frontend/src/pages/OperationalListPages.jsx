@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { ActionMenu } from '../components/ui/ActionMenu.jsx';
+import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { PageHeader } from '../components/ui/PageHeader.jsx';
 import { ScreenToolbar } from '../components/ui/ScreenToolbar.jsx';
 import { StatusBadge } from '../components/ui/Badge.jsx';
@@ -269,7 +270,13 @@ export function PurchaseReceiptStartPage() {
           purchasingService.listPurchaseOrders(accessToken),
           catalogService.listVendors(accessToken),
         ]);
-        setOrders(orderRows.filter((order) => ['SUBMITTED', 'PARTIALLY_RECEIVED'].includes(order.status)));
+        setOrders(
+          orderRows.filter(
+            (order) =>
+              ['APPROVED', 'PARTIALLY_RECEIVED'].includes(order.status) &&
+              order.items.some((item) => Number(item.ordered_quantity) - Number(item.received_quantity) > 0),
+          ),
+        );
         setVendorsById(Object.fromEntries(vendorRows.map((row) => [row.id, row])));
       } catch (loadError) {
         setError(loadError.message);
@@ -305,12 +312,12 @@ export function PurchaseReceiptStartPage() {
         backTo="/purchase-receipts"
         kicker="Purchases"
         title="Start receipt workflow"
-        description="Choose a submitted purchase order to open the focused receiving workflow."
+        description="Choose an approved purchase order to open the focused receiving workflow."
       />
       {error ? <ErrorState description={error} /> : null}
       <TableShell
         description={`${sortedOrders.length} receivable purchase order(s) in view`}
-        emptyDescription={activeFilters.length ? 'Reset filters to review all receivable purchase orders.' : 'Purchase orders must be submitted before goods can be received.'}
+        emptyDescription={activeFilters.length ? 'Reset filters to review all receivable purchase orders.' : 'Purchase orders must be approved before goods can be received.'}
         emptyTitle={activeFilters.length ? 'No records match your filters' : 'No receivable purchase orders'}
         error={error}
         isEmpty={sortedOrders.length === 0}
@@ -326,34 +333,42 @@ export function PurchaseReceiptStartPage() {
             searchValue={search}
           />
         }
-      >
-        <table>
-          <thead>
-            <tr>
-              <th><SortableHeader label="PO number" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="po_number" sortState={sortState} /></th>
-              <th><SortableHeader label="Vendor" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="vendor" sortState={sortState} /></th>
-              <th><SortableHeader label="Status" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="status" sortState={sortState} /></th>
-              <th className="text-right"><SortableHeader align="right" label="Lines" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="lines" sortState={sortState} /></th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {sortedOrders.map((order) => (
-              <tr key={order.id}>
-                <td><span className="font-semibold text-warelyn-text">{order.po_number}</span></td>
-                <td>{vendorsById[order.vendor_id]?.name ?? `Vendor #${order.vendor_id}`}</td>
-                <td><StatusBadge status={order.status}>{order.status}</StatusBadge></td>
-                <td className="number-cell">{order.items.length}</td>
-                <td className="text-right">
-                  <Button onClick={() => navigate(`/purchases/${order.id}/receive`)} type="button" variant="secondary">
-                    Open receive workflow
-                    <ArrowRight size={15} />
-                  </Button>
-                </td>
+        >
+        {sortedOrders.length === 0 ? (
+          <EmptyState
+            action={activeFilters.length ? undefined : <Link to="/purchases"><Button variant="secondary">Go to purchases</Button></Link>}
+            description={activeFilters.length ? 'Reset filters to review all receivable purchase orders.' : 'Purchase orders must be approved before goods can be received.'}
+            title={activeFilters.length ? 'No records match your filters' : 'No receivable purchase orders'}
+          />
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th><SortableHeader label="PO number" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="po_number" sortState={sortState} /></th>
+                <th><SortableHeader label="Vendor" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="vendor" sortState={sortState} /></th>
+                <th><SortableHeader label="Status" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="status" sortState={sortState} /></th>
+                <th className="text-right"><SortableHeader align="right" label="Lines" onSort={(key) => setSortState((current) => getNextSort(current, key))} sortKey="lines" sortState={sortState} /></th>
+                <th />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sortedOrders.map((order) => (
+                <tr key={order.id}>
+                  <td><span className="font-semibold text-warelyn-text">{order.po_number}</span></td>
+                  <td>{vendorsById[order.vendor_id]?.name ?? `Vendor #${order.vendor_id}`}</td>
+                  <td><StatusBadge status={order.status}>{order.status}</StatusBadge></td>
+                  <td className="number-cell">{order.items.length}</td>
+                  <td className="text-right">
+                    <Button onClick={() => navigate(`/purchases/${order.id}/receive`)} type="button" variant="secondary">
+                      Open receive workflow
+                      <ArrowRight size={15} />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </TableShell>
     </div>
   );

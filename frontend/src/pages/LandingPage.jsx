@@ -125,17 +125,34 @@ export function LandingPage() {
         <section className="landing-preview" id="screens">
           <h2 className="text-2xl font-bold text-slate-900">Explore live product screens</h2>
           <p className="mt-2 text-sm leading-7 text-slate-600">Visual demos styled to mirror the actual Warelyn product experience.</p>
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {landingDemoMeta.map((screen) => (
-              <article className="group rounded-2xl border border-warelyn-border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md" key={screen.title}>
-                <span className="inline-flex rounded-full bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-warelyn-primary">{screen.tag}</span>
-                <h3 className="mt-3 text-sm font-semibold text-slate-900">{screen.title}</h3>
-                <p className="mt-1.5 text-xs leading-6 text-slate-600">{screen.description}</p>
-                <div className="mt-3">
-                  <LandingDemoPreview tag={screen.tag} />
-                </div>
-              </article>
-            ))}
+          <div className="mt-6 space-y-6">
+            {landingDemoMeta.map((screen, index) => {
+              const reverse = index % 2 === 1;
+              return (
+                <article className="grid gap-6 rounded-3xl border border-warelyn-border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md lg:grid-cols-[0.92fr_1.08fr] lg:items-center" key={screen.title}>
+                  <div className={`landing-screen-copy space-y-4 ${reverse ? 'lg:order-2' : ''}`}>
+                    <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-warelyn-primary">{screen.tag}</span>
+                    <div className="space-y-2">
+                      <h3 className="text-xl font-semibold text-slate-950">{screen.title}</h3>
+                      <p className="text-sm leading-7 text-slate-600">{screen.description}</p>
+                    </div>
+                    <ul className="space-y-2 text-sm leading-6 text-slate-600">
+                      {screen.points?.map((point) => (
+                        <li className="flex gap-2" key={point}>
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-warelyn-primary" />
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className={`landing-screen-preview ${reverse ? 'lg:order-1' : ''}`}>
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-inner sm:p-5">
+                      <LandingDemoPreview tag={screen.tag} />
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
 
@@ -159,7 +176,7 @@ export function LandingPage() {
         <span className="landing-footer-brand">
           <AppLogo size="landing-footer" variant="mark" />
         </span>
-        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-5 text-sm text-slate-500">
           {socialLinks.map((name) => (
             <a className="transition hover:text-warelyn-primary" href="#" key={name}>
               {name}
@@ -169,7 +186,7 @@ export function LandingPage() {
           <a className="transition hover:text-warelyn-primary" href="#">Privacy</a>
           <a className="transition hover:text-warelyn-primary" href="#">Terms</a>
         </div>
-        <span className="text-xs">© 2026 Warelyn Inventory. All rights reserved.</span>
+        <span className="text-sm">© 2026 Warelyn Inventory. All rights reserved.</span>
       </footer>
     </div>
   );

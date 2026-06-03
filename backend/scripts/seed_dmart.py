@@ -1132,7 +1132,7 @@ def seed_open_reorder_po(
         "PO-DM-SAM-OPEN",
         order_date=dt(2026, 6, 1),
         expected_date=dt(2026, 6, 15),
-        status=PurchaseOrderStatus.SUBMITTED,
+        status=PurchaseOrderStatus.APPROVED,
         notes="Open purchase order for low-stock planning.",
     )
     for sku, qty, unit_cost in [("ELEC-TV-SAM43", 10, d("18500.00")), ("ELEC-HP-BOAT450", 20, d("850.00"))]:

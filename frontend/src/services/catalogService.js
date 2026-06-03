@@ -115,8 +115,9 @@ export async function downloadProductLabelsPdf(accessToken, productIds, tracking
   });
 }
 
-export async function downloadProductLabelsForProductPdf(accessToken, productId) {
-  return fetchBlobFromCandidates(`/catalog/products/${productId}/labels.pdf`, accessToken, {
+export async function downloadProductLabelsForProductPdf(accessToken, productId, { batchId } = {}) {
+  const query = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : '';
+  return fetchBlobFromCandidates(`/catalog/products/${productId}/labels.pdf${query}`, accessToken, {
     method: 'POST',
     cache: 'no-store',
   });

@@ -1,7 +1,7 @@
 import csv
 from io import StringIO
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -173,15 +173,17 @@ def download_product_labels_pdf(
 @router.post("/products/{product_id}/labels.pdf")
 def download_product_labels_for_product_pdf(
     product_id: int,
+    batch_id: int | None = Query(default=None, ge=1),
     context: UserContext = Depends(require_roles(*product_reader_roles)),
     db: Session = Depends(get_db),
 ) -> Response:
-    pdf_bytes = ProductLabelService(db).render_product_labels_for_product_pdf(context.tenant_id, product_id)
+    pdf_bytes = ProductLabelService(db).render_product_labels_for_product_pdf(context.tenant_id, product_id, batch_id=batch_id)
+    filename = f"product-{product_id}-labels.pdf" if batch_id is None else f"product-{product_id}-batch-{batch_id}-labels.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="product-{product_id}-labels.pdf"',
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
             "Pragma": "no-cache",
             "Expires": "0",

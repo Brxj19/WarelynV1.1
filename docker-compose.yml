@@ -1,20 +1,22 @@
 services:
-  postgres:
-    image: postgres:16
-    container_name: warelyn-postgres
+  mysql:
+    image: mysql:8.0
+    container_name: warelyn-mysql
+    command: --default-authentication-plugin=mysql_native_password
     environment:
-      POSTGRES_DB: warelyn_dev
-      POSTGRES_USER: warelyn
-      POSTGRES_PASSWORD: warelyn_secret
+      MYSQL_DATABASE: warelyn_dev
+      MYSQL_USER: warelyn
+      MYSQL_PASSWORD: warelyn_secret
+      MYSQL_ROOT_PASSWORD: root_secret
     ports:
-      - "5433:5432"
+      - "3307:3306"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u $$MYSQL_USER -p$$MYSQL_PASSWORD"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
 
   mailhog:
     image: mailhog/mailhog:latest
@@ -44,7 +46,7 @@ services:
     command: sh -c "cd /app && python -m alembic upgrade head && python scripts/seed_dmart.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     environment:
       WARELYN_ENVIRONMENT: development
-      WARELYN_DATABASE_URL: postgresql+psycopg://warelyn:warelyn_secret@postgres:5432/warelyn_dev
+      WARELYN_DATABASE_URL: mysql+pymysql://warelyn:warelyn_secret@mysql:3306/warelyn_dev
       WARELYN_CORS_ORIGINS: '["http://localhost:5173", "http://127.0.0.1:5173"]'
       WARELYN_JWT_SECRET_KEY: replace-with-a-long-random-secret
       WARELYN_SUPER_ADMIN_EMAIL: superadmin@warelyn.dev
@@ -52,9 +54,6 @@ services:
       WARELYN_SUPER_ADMIN_NAME: Warelyn Super Admin
       WARELYN_SEED_SUPER_ADMIN_ON_STARTUP: "true"
       SEED_ON_STARTUP: "true"
-      POSTGRES_DB: warelyn_dev
-      POSTGRES_USER: warelyn
-      POSTGRES_PASSWORD: warelyn_secret
       WARELYN_SMTP_HOST: mailhog
       WARELYN_SMTP_PORT: "1025"
       WARELYN_SMTP_USERNAME: ""
@@ -71,7 +70,7 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -92,6 +91,6 @@ services:
       - backend
 
 volumes:
-  pgdata:
+  mysql-data:
   mongo-data:
   frontend-node-modules:

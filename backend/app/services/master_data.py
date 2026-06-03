@@ -253,7 +253,7 @@ class CatalogService:
                 return batch.batch_number
         return None
 
-    def _compact_json(self, value: dict[str, Any]) -> str:
+    def _compact_json(self, value: Any) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
 
     def _qr_matrix(self, payload: str) -> list[list[bool]]:
@@ -476,16 +476,15 @@ class ProductLabelService:
         )
         return render_html_to_pdf(html)
 
-    def render_product_labels_for_product_pdf(self, tenant_id: int, product_id: int) -> bytes:
+    def render_product_labels_for_product_pdf(self, tenant_id: int, product_id: int, batch_id: int | None = None) -> bytes:
         product = self.products.get_by_id_for_tenant(tenant_id, product_id)
         if product is None:
             raise AppError("PRODUCT_NOT_FOUND", "Product was not found for this tenant.", 404)
-        total_available = self.inventory.total_available_for_product(tenant_id, product_id)
-        label_count = int(float(total_available) // 1)
-        if label_count <= 0:
-            raise AppError("NO_LABEL_QUANTITY", "No available stock exists for this product.", 400)
         tenant = self.documents.get_tenant(tenant_id)
         company_name = tenant.company_name if tenant else "Warelyn"
+        label_specs = self._product_label_specs_for_product(tenant_id, product, batch_id=batch_id)
+        if not label_specs:
+            raise AppError("NO_LABEL_QUANTITY", "No available stock exists for this product.", 400)
         cache_key = (
             str(tenant_id),
             str(product.id),
@@ -497,20 +496,82 @@ class ProductLabelService:
             str(product.track_batch),
             str(product.track_expiry),
             str(product.track_serial),
-            str(label_count),
-            str(total_available),
+            str(batch_id or ""),
+            self._compact_json([spec["cache_key"] for spec in label_specs]),
         )
         cached = _FAST_LABEL_PDF_CACHE.get(cache_key)
         if cached is not None:
             _FAST_LABEL_PDF_CACHE.move_to_end(cache_key)
             return cached
 
-        pdf_bytes = self._build_fast_product_labels_pdf(company_name, product, label_count)
+        pdf_bytes = self._build_fast_product_labels_pdf(company_name, product, label_specs)
         _FAST_LABEL_PDF_CACHE[cache_key] = pdf_bytes
         _FAST_LABEL_PDF_CACHE.move_to_end(cache_key)
         while len(_FAST_LABEL_PDF_CACHE) > _FAST_LABEL_PDF_CACHE_MAX:
             _FAST_LABEL_PDF_CACHE.popitem(last=False)
         return pdf_bytes
+
+    def _product_label_specs_for_product(self, tenant_id: int, product: Product, batch_id: int | None = None) -> list[dict[str, Any]]:
+        if product.track_serial:
+            serials = [
+                serial
+                for serial in self.inventory.list_serials_for_product(tenant_id, product.id)
+                if getattr(serial, "status", None) is None or getattr(serial.status, "value", serial.status) == "IN_STOCK"
+            ]
+            if batch_id is not None:
+                serials = [serial for serial in serials if serial.batch_id == batch_id]
+            serials.sort(key=lambda serial: ((serial.serial_number or "").lower(), serial.id))
+            if not serials:
+                return []
+
+            batch_lookup = {batch.id: batch for batch in self.inventory.list_batches_for_product(tenant_id, product.id)}
+            return [
+                {
+                    "qr_payload": self._product_tracking_qr_payload(product, serial=serial),
+                    "barcode_value": serial.serial_number or product.barcode or product.sku or f"PROD-{product.id}",
+                    "meta_lines": [
+                        f"Serial: {serial.serial_number}",
+                        f"Batch: {batch_lookup.get(serial.batch_id).batch_number if serial.batch_id and batch_lookup.get(serial.batch_id) else '—'}",
+                        f"Status: {getattr(serial.status, 'value', serial.status)}",
+                    ],
+                    "cache_key": f"serial:{serial.id}:{serial.serial_number}:{serial.batch_id or ''}:{getattr(serial.status, 'value', serial.status)}",
+                }
+                for serial in serials
+            ]
+
+        if batch_id is not None:
+            batch = self.inventory.get_batch(tenant_id, batch_id)
+            if batch is None or getattr(batch, "product_id", None) != product.id:
+                raise AppError("BATCH_NOT_FOUND", "The selected batch was not found for this product.", 404)
+            label_count = int(float(batch.quantity_available or 0) // 1)
+            if label_count <= 0:
+                return []
+            batch_payload = self._product_tracking_qr_payload(product, batch=batch)
+            batch_meta = self._batch_meta_lines(batch)
+            return [
+                {
+                    "qr_payload": batch_payload,
+                    "barcode_value": batch.batch_number or product.barcode or product.sku or f"PROD-{product.id}",
+                    "meta_lines": batch_meta,
+                    "cache_key": f"batch:{batch.id}:{label_count}:{batch_payload}",
+                }
+                for _ in range(label_count)
+            ]
+
+        total_available = self.inventory.total_available_for_product(tenant_id, product.id)
+        label_count = int(float(total_available) // 1)
+        if label_count <= 0:
+            return []
+        product_payload = self._product_tracking_qr_payload(product)
+        return [
+            {
+                "qr_payload": product_payload,
+                "barcode_value": product.barcode or product.sku or f"PROD-{product.id}",
+                "meta_lines": [f"Tracking: {self._tracking_text(product)}"],
+                "cache_key": f"product:{label_count}:{total_available}:{product_payload}",
+            }
+            for _ in range(label_count)
+        ]
 
     def _compact_json(self, value: dict[str, Any]) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, default=str)
@@ -573,7 +634,7 @@ class ProductLabelService:
                 cell_y = offset_y + (rows - row_index - 1) * cell
                 page_commands.append(_pdf_rect_command(cell_x, cell_y, cell, cell, fill=True))
 
-    def _build_fast_product_labels_pdf(self, company_name: str, product: Product, label_count: int) -> bytes:
+    def _build_fast_product_labels_pdf(self, company_name: str, product: Product, label_specs: list[dict[str, Any]]) -> bytes:
         page_width = 595.28
         page_height = 841.89
         margin = 18.0
@@ -583,19 +644,17 @@ class ProductLabelService:
         label_width = (page_width - (margin * 2) - gap) / columns
         label_height = (page_height - (margin * 2) - (gap * (rows - 1))) / rows
         labels_per_page = columns * rows
-        barcode_value = (product.barcode or product.sku or f"PROD-{product.id}").strip()
         tracking_text = self._tracking_text(product)
         product_name_lines = wrap(product.name, width=22)[:2] or [product.name]
         if len(product_name_lines) == 1 and len(product_name_lines[0]) > 26:
             product_name_lines = [product_name_lines[0][:26]]
-        qr_payload = self._product_tracking_qr_payload(product)
-        qr_matrix = self._qr_matrix(qr_payload)
 
         pages: list[str] = []
-        for start in range(0, label_count, labels_per_page):
+        for start in range(0, len(label_specs), labels_per_page):
             page_commands = ["0 0 0 rg", "0 0 0 RG"]
-            chunk_size = min(labels_per_page, label_count - start)
+            chunk_size = min(labels_per_page, len(label_specs) - start)
             for index in range(chunk_size):
+                label_spec = label_specs[start + index]
                 col = index % columns
                 row = index // columns
                 x = margin + col * (label_width + gap)
@@ -607,12 +666,15 @@ class ProductLabelService:
                 qr_x = x + label_width - qr_size - 8.0
                 qr_y = y + label_height - qr_size - 10.0
                 page_commands.append("0 0 0 rg")
-                self._draw_qr_matrix(page_commands, qr_matrix, qr_x, qr_y, qr_size)
+                self._draw_qr_matrix(page_commands, self._qr_matrix(label_spec["qr_payload"]), qr_x, qr_y, qr_size)
                 for line_index, line in enumerate(product_name_lines):
                     page_commands.append(_pdf_text_command("F1", 11 if line_index == 0 else 10, x + 8, y + label_height - 32 - (line_index * 12), line))
                 page_commands.append(_pdf_text_command("F2", 7.5, x + 8, y + label_height - 58, f"SKU: {product.sku}"))
                 page_commands.append(_pdf_text_command("F2", 7.5, x + 8, y + label_height - 69, f"Barcode: {product.barcode or 'N/A'}"))
-                page_commands.append(_pdf_text_command("F2", 7.5, x + 8, y + label_height - 80, f"Tracking: {tracking_text}"))
+                meta_lines = label_spec.get("meta_lines") or [f"Tracking: {tracking_text}"]
+                for line_index, line in enumerate(meta_lines[:3]):
+                    page_commands.append(_pdf_text_command("F2", 7.5, x + 8, y + label_height - 80 - (line_index * 10), line))
+                barcode_value = (label_spec.get("barcode_value") or product.barcode or product.sku or f"PROD-{product.id}").strip()
                 segments, total_width = _barcode_segments(barcode_value)
                 barcode_max_width = label_width - 16.0
                 scale = min(1.0, barcode_max_width / total_width) if total_width > 0 else 1.0
@@ -630,6 +692,19 @@ class ProductLabelService:
             pages.append("\n".join(page_commands))
 
         return _build_multi_page_pdf(pages, title=f"{company_name} product labels")
+
+    def _batch_meta_lines(self, batch: Any) -> list[str]:
+        lines = [f"Batch: {getattr(batch, 'batch_number', None) or '—'}"]
+        supplier_batch = getattr(batch, "supplier_batch_number", None)
+        if supplier_batch:
+            lines.append(f"Supplier batch: {supplier_batch}")
+        expiry_date = getattr(batch, "expiry_date", None)
+        if expiry_date:
+            lines.append(f"Expiry: {expiry_date}")
+        warranty_until = getattr(batch, "warranty_until", None)
+        if warranty_until:
+            lines.append(f"Warranty: {warranty_until}")
+        return lines
 
     def _build_html(self, company_name: str, products: list[Product], heading: str | None = None, subtitle: str | None = None) -> str:
         cards = "".join(self._render_label_card(product) for product in products)

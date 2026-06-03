@@ -18,7 +18,7 @@ const placementSizes = {
   'auth-form': { width: 132, height: 38 },
   'landing-nav': { width: 112, height: 32 },
   'landing-hero': { width: 168, height: 48 },
-  'landing-footer': { width: 84, height: 24 },
+  'landing-footer': { width: 108, height: 30 },
 };
 
 export function AppLogo({ alt = 'Warelyn', className = '', imageClassName = '', size = 'sidebar', variant = 'full' }) {

@@ -7,6 +7,7 @@ import { Button } from '../components/ui/Button.jsx';
 import { Card, CardBody, CardHeader } from '../components/ui/Card.jsx';
 import { ConfirmationModal } from '../components/ui/ConfirmationModal.jsx';
 import { ErrorState } from '../components/ui/ErrorState.jsx';
+import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { Input } from '../components/ui/Input.jsx';
 import { LoadingState } from '../components/ui/LoadingState.jsx';
 import { StockImpactPreview } from '../components/ui/StockImpactPreview.jsx';
@@ -48,7 +49,29 @@ export function PurchaseReceivePage() {
         setProductsById(Object.fromEntries(productRows.map((product) => [product.id, product])));
         setWarehouses(warehouseRows);
         setLocationsByWarehouse(locationMap);
-        setLines(orderRow.items.map((item) => ({ purchase_order_item_id: item.id, product_id: item.product_id, warehouse_id: defaultWarehouse, location_id: defaultLocation, received_quantity: Math.max(0, Number(item.ordered_quantity) - Number(item.received_quantity)).toString(), unit_cost: item.unit_cost, batch_number: '', supplier_batch_number: '', manufacture_date: '', expiry_date: '', warranty_until: '', serial_numbers: '' })));
+        const receivableLines = orderRow.items
+          .map((item, itemIndex) => {
+            const remaining = Math.max(0, Number(item.ordered_quantity) - Number(item.received_quantity));
+            if (remaining <= 0) return null;
+            return {
+              purchase_order_item_id: item.id,
+              source_item_index: itemIndex,
+              product_id: item.product_id,
+              warehouse_id: defaultWarehouse,
+              location_id: defaultLocation,
+              remaining_quantity: remaining.toString(),
+              received_quantity: remaining.toString(),
+              unit_cost: item.unit_cost,
+              batch_number: '',
+              supplier_batch_number: '',
+              manufacture_date: '',
+              expiry_date: '',
+              warranty_until: '',
+              serial_numbers: '',
+            };
+          })
+          .filter(Boolean);
+        setLines(receivableLines);
       } catch (loadError) {
         setError(loadError.message);
       } finally {
@@ -79,7 +102,7 @@ export function PurchaseReceivePage() {
     setError('');
     try {
       const items = lines
-        .filter((line, index) => Number(line.received_quantity) > 0 && Number(line.received_quantity) <= Number(order.items[index].ordered_quantity) - Number(order.items[index].received_quantity))
+        .filter((line) => Number(line.received_quantity) > 0 && Number(line.received_quantity) <= Number(line.remaining_quantity))
         .map((line) => {
           const serialNumbers = line.serial_numbers.split(/[\n,]+/).map((value) => value.trim()).filter(Boolean);
           return {
@@ -114,11 +137,10 @@ export function PurchaseReceivePage() {
     .filter((line) => Number(line.received_quantity) > 0)
     .map((line, index) => {
       const product = productsById[line.product_id];
-      const item = order.items[index];
       return {
         id: line.purchase_order_item_id,
         product: product?.name ?? `Product #${line.product_id}`,
-        meta: `${line.warehouse_id ? `Warehouse ${line.warehouse_id}` : 'Warehouse'} • ${line.location_id ? `Location ${line.location_id}` : 'Location'} • Remaining ${formatDecimal(Number(item.ordered_quantity) - Number(item.received_quantity))}`,
+        meta: `${line.warehouse_id ? `Warehouse ${line.warehouse_id}` : 'Warehouse'} • ${line.location_id ? `Location ${line.location_id}` : 'Location'} • Remaining ${formatDecimal(Number(line.remaining_quantity))}`,
         effect: `Accepted quantity ${formatDecimal(line.received_quantity)} is prepared for receipt draft creation.`,
         warning: product?.track_serial ? 'Serial-tracked items need matching serial count before commit.' : null,
       };
@@ -128,6 +150,13 @@ export function PurchaseReceivePage() {
     <div className="space-y-6">
       <PageHeader backTo="/purchases" description="Choose warehouse and location for each received line. The backend validates remaining quantities before stock changes." kicker="Receiving" title={`Receive ${order.po_number}`} />
       {error ? <ErrorState description={error} /> : null}
+      {lines.length === 0 ? (
+        <EmptyState
+          action={<Button onClick={() => navigate('/purchase-receipts')} type="button" variant="secondary">Back to receipts</Button>}
+          description="This purchase order has no remaining quantity to receive."
+          title="Nothing left to receive"
+        />
+      ) : (
       <form className="space-y-6" onSubmit={handleSubmit}>
         <Card>
           <CardHeader><h2 className="text-lg font-semibold text-warelyn-text">Receipt</h2></CardHeader>
@@ -140,9 +169,8 @@ export function PurchaseReceivePage() {
           <CardHeader><h2 className="text-lg font-semibold text-warelyn-text">Receipt lines</h2></CardHeader>
           <CardBody className="space-y-4">
             {lines.map((line, index) => {
-              const item = order.items[index];
               const product = productsById[line.product_id];
-              const remaining = Number(item.ordered_quantity) - Number(item.received_quantity);
+              const remaining = Number(line.remaining_quantity);
               const matchesSearch = !barcodeSearch || `${product?.name ?? ''} ${product?.sku ?? ''} ${product?.barcode ?? ''}`.toLowerCase().includes(barcodeSearch.toLowerCase());
               const isTracked = product?.track_batch || product?.track_expiry || product?.track_serial;
               if (!matchesSearch) return null;
@@ -170,6 +198,7 @@ export function PurchaseReceivePage() {
           </div>
         </div>
       </form>
+      )}
       <ConfirmationModal confirmLabel="Create receipt draft" description="This creates a receiving draft only. Stock changes later when the receipt is committed by the backend." isLoading={isSaving} onCancel={() => setIsConfirming(false)} onConfirm={createReceiptDraft} open={isConfirming} title="Confirm receiving draft" variant="accent" />
     </div>
   );

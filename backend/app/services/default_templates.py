@@ -5613,7 +5613,7 @@ _CLASSIC_INVOICE_PDF = '''<!DOCTYPE html>
     <div class="header">
       <div class="company">
         {% if tenant.logo_url %}
-          <img alt="{{ tenant.company_name }} logo" src="{{ tenant.logo_url }}" style="display:block;max-height:42px;max-width:180px;object-fit:contain;margin:0 0 8px;" />
+          <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
         {% endif %}
         <h1>{{ tenant.company_name }}</h1>
 
@@ -6068,7 +6068,7 @@ _CLASSIC_BILL_PDF = '''<!DOCTYPE html>
     <div class="header">
       <div class="company">
         {% if tenant.logo_url %}
-          <img alt="{{ tenant.company_name }} logo" src="{{ tenant.logo_url }}" style="display:block;max-height:42px;max-width:180px;object-fit:contain;margin:0 0 8px;" />
+          <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
         {% endif %}
         <h1>{{ tenant.company_name }}</h1>
         {% if tenant.contact_email %}<p>{{ tenant.contact_email }}</p>{% endif %}
@@ -6479,6 +6479,9 @@ _MODERN_INVOICE_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 
@@ -6936,6 +6939,9 @@ _MODERN_BILL_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 
@@ -7320,6 +7326,9 @@ _MINIMAL_INVOICE_PDF = '''<!DOCTYPE html>
 
     <div class="top">
       <div class="company-block">
+        {% if tenant.logo_url %}
+          <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+        {% endif %}
         <p class="company-name">{{ tenant.company_name }}</p>
 
         {% if tenant.contact_email %}
@@ -7714,6 +7723,9 @@ _MINIMAL_BILL_PDF = '''<!DOCTYPE html>
   <div class="page">
     <div class="top">
       <div class="company-block">
+        {% if tenant.logo_url %}
+          <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+        {% endif %}
         <p class="company-name">{{ tenant.company_name }}</p>
         {% if tenant.contact_email %}<p class="company-detail">{{ tenant.contact_email }}</p>{% endif %}
         {% if tenant.phone %}<p class="company-detail">{{ tenant.phone }}</p>{% endif %}
@@ -8123,6 +8135,9 @@ _BOLD_INVOICE_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 
@@ -8584,6 +8599,9 @@ _BOLD_BILL_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 
@@ -9032,6 +9050,9 @@ _WARM_INVOICE_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 
@@ -9492,6 +9513,9 @@ _WARM_BILL_PDF = '''<!DOCTYPE html>
 <body>
   <div class="page">
     <div class="sidebar">
+      {% if tenant.logo_url %}
+        <img src="{{tenant.logo_url}}" alt="{{ tenant.company_name }} logo" style="max-height: 42px; max-width: 150px; object-fit: contain; margin: 0 0 8px;">
+      {% endif %}
       <h1>{{ tenant.company_name }}</h1>
       <p class="sub">Inventory Platform</p>
 

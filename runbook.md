@@ -48,7 +48,7 @@ The frontend expects the backend at `http://localhost:8000/api`.
 
 Docker Compose brings up:
 
-- PostgreSQL on `localhost:5433` to avoid colliding with a local Postgres install
+- MySQL on `localhost:3307` to avoid colliding with a local MySQL install
 - MongoDB on `localhost:27017`
 - MailHog on `http://localhost:8025`
 - Backend on `http://localhost:8000`

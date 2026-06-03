@@ -90,7 +90,9 @@ export function ProductDetailPage() {
 
   async function downloadLabels() {
     if (!product) return;
-    const blob = await catalogService.downloadProductLabelsForProductPdf(accessToken, product.id);
+    const blob = await catalogService.downloadProductLabelsForProductPdf(accessToken, product.id, {
+      batchId: selectedBatchId ? Number(selectedBatchId) : undefined,
+    });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
