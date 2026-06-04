@@ -1,0 +1,7 @@
+interface:
+  display_name: "FastAPI + React SaaS"
+  short_description: "Backend, frontend, workflow, and deployment patterns"
+  default_prompt: "Use $saas-fastapi-react to apply the FastAPI + React SaaS architecture, workflow, RBAC, testing, and deployment rules."
+
+policy:
+  allow_implicit_invocation: true
