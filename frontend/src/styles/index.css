@@ -635,7 +635,14 @@ tbody tr:hover {
 
   .landing-bg-canvas {
     @apply pointer-events-none absolute inset-0 -z-0 overflow-hidden;
-    background-image: radial-gradient(rgba(30, 58, 138, 0.16) 1px, transparent 1px);
+    background-image: radial-gradient(rgba(30, 58, 138, 0.24) 1px, transparent 1px);
+    background-size: 24px 24px;
+    animation: driftGrid 22s linear infinite;
+  }
+
+  .auth-bg-canvas {
+    @apply pointer-events-none absolute inset-0 -z-0 overflow-hidden;
+    background-image: radial-gradient(rgba(30, 58, 138, 0.18) 1px, transparent 1px);
     background-size: 24px 24px;
     animation: driftGrid 22s linear infinite;
   }

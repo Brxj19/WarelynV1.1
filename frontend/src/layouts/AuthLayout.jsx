@@ -11,7 +11,8 @@ const authHighlights = [
 
 export function AuthLayout() {
   return (
-    <div className="grid min-h-screen bg-white lg:grid-cols-[1.06fr_0.94fr]">
+    <div className="relative grid min-h-screen overflow-hidden bg-white lg:grid-cols-[1.06fr_0.94fr]">
+      <div className="auth-bg-canvas" aria-hidden="true" />
       <section className="auth-panel hidden lg:flex lg:flex-col lg:justify-between">
         <div>
           <AppLogo className="mb-10" size="auth" variant="full" />
@@ -43,7 +44,7 @@ export function AuthLayout() {
         </div>
       </section>
 
-      <main className="flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(30,58,138,0.08),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-6 py-12">
+      <main className="relative z-10 flex items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(30,58,138,0.08),_transparent_44%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-6 py-12">
         <Outlet />
       </main>
     </div>
