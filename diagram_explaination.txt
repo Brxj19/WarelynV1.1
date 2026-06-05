@@ -1,0 +1,34 @@
+Agentic Workflow - Slide Speaker Notes
+
+This diagram shows how the AI flow works inside Warelyn. A user can start from either the FAQ widget or the Tenant Admin copilot.
+
+The first step is intent routing. The system decides whether the question is a FAQ-style knowledge query or an operational copilot request.
+
+Before answering, guardrails check whether the question is actually about Warelyn Inventory. If it is off-topic, the assistant abstains instead of guessing.
+
+For FAQ queries, the system retrieves grounded content from the curated knowledge documents in docs/knowledge. The response is built from trusted context, not from memory alone.
+
+For copilot queries, the system reads tenant-only live data such as report snapshots and workflow summaries. It stays read-only and does not directly change business data.
+
+Both paths call Gemini to generate the response. Then the confidence gate checks whether the answer is strong enough. If confidence is low, the assistant returns a safe fallback. If confidence is high, it returns the final answer with citations, suggested actions, and report insights when needed.
+
+The key message of this diagram is that Warelyn AI is grounded, read-only, and confidence-aware.
+
+
+RAG Architecture - Slide Speaker Notes
+
+This diagram shows how the Warelyn FAQ RAG system is built.
+
+It starts with curated knowledge documents in docs/knowledge. These documents are written in a Q&A-friendly format so the assistant can answer real operational questions.
+
+Each document is split into smaller chunks, and each chunk is converted into an embedding. The embeddings are stored in MySQL inside faq_chunks.embedding, so Warelyn does not need a separate vector database.
+
+When a user asks a question, the system uses hybrid retrieval. That means it combines keyword search with embedding similarity to find the most relevant chunks.
+
+The retrieved chunks are passed into Gemini as grounded context. Gemini is instructed to answer only from that context.
+
+After generation, the confidence gate checks whether the answer is actually supported. If the evidence is weak, the assistant abstains rather than guessing.
+
+The final response includes citations, suggested actions, and safe fallback handling. Session history and feedback are stored separately in MongoDB.
+
+The key message of this diagram is: documents in, embeddings stored in MySQL, retrieval at query time, Gemini for generation, and confidence-based control on top.

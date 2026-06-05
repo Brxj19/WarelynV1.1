@@ -1,4 +1,4 @@
-import { Download, Printer, QrCode } from 'lucide-react';
+import { Printer, QrCode } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -21,7 +21,7 @@ function QrMatrix({ matrix }) {
   return (
     <div
       aria-label="QR code"
-      className="grid rounded-2xl border border-warelyn-border bg-white p-3 shadow-sm"
+      className="grid rounded-xl border border-warelyn-border bg-white p-3 shadow-sm"
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {matrix.flatMap((row, rowIndex) =>
@@ -46,6 +46,95 @@ function DetailList({ items }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function CompactField({ label, value }) {
+  return (
+    <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
+      <dt className="font-semibold text-warelyn-muted">{label}</dt>
+      <dd className="break-words text-warelyn-text">{value ?? '—'}</dd>
+    </div>
+  );
+}
+
+function BarcodeSvg({ value }) {
+  const normalized = String(value ?? '').toUpperCase().replace(/[^0-9A-Z\-\.\ \$\/\+\%]/g, '');
+  if (!normalized) {
+    return null;
+  }
+  const patterns = {
+    0: 'nnnwwnwnn',
+    1: 'wnnwnnnnw',
+    2: 'nnwwnnnnw',
+    3: 'wnwwnnnnn',
+    4: 'nnnwwnnnw',
+    5: 'wnnwwnnnn',
+    6: 'nnwwwnnnn',
+    7: 'nnnwnnwnw',
+    8: 'wnnwnnwnn',
+    9: 'nnwwnnwnn',
+    A: 'wnnnnwnnw',
+    B: 'nnwnnwnnw',
+    C: 'wnwnnwnnn',
+    D: 'nnnnwwnnw',
+    E: 'wnnnwwnnn',
+    F: 'nnwnwwnnn',
+    G: 'nnnnnwwnw',
+    H: 'wnnnnwwnn',
+    I: 'nnwnnwwnn',
+    J: 'nnnnwwwnn',
+    K: 'wnnnnnnww',
+    L: 'nnwnnnnww',
+    M: 'wnwnnnnwn',
+    N: 'nnnnwnnww',
+    O: 'wnnnwnnwn',
+    P: 'nnwnwnnwn',
+    Q: 'nnnnnnwww',
+    R: 'wnnnnnwwn',
+    S: 'nnwnnnwwn',
+    T: 'nnnnwnwwn',
+    U: 'wwnnnnnnw',
+    V: 'nwwnnnnnw',
+    W: 'wwwnnnnnn',
+    X: 'nwnnwnnnw',
+    Y: 'wwnnwnnnn',
+    Z: 'nwwnwnnnn',
+    '-': 'nwnnnnwnw',
+    '.': 'wwnnnnwnn',
+    ' ': 'nwwnnnwnn',
+    '$': 'nwnwnwnnn',
+    '/': 'nwnwnnnwn',
+    '+': 'nwnnnwnwn',
+    '%': 'nnnwnwnwn',
+    '*': 'nwnnwnwnn',
+  };
+
+  const encoded = `*${normalized}*`;
+  let x = 6;
+  const bars = [];
+  for (const char of encoded) {
+    const pattern = patterns[char];
+    if (!pattern) continue;
+    pattern.split('').forEach((symbol, index) => {
+      const width = symbol === 'w' ? 5 : 2;
+      if (index % 2 === 0) {
+        bars.push(<rect key={`${char}-${index}-${x}`} x={x} y="0" width={width} height="36" fill="#111827" rx="0.5" />);
+      }
+      x += width;
+    });
+    x += 2;
+  }
+  const width = x + 8;
+
+  return (
+    <svg className="w-full max-w-[240px]" viewBox={`0 0 ${width} 48`} role="img" aria-label={`Barcode for ${value}`}>
+      <rect width="100%" height="100%" fill="white" />
+      {bars}
+      <text x={width / 2} y="46" textAnchor="middle" fontFamily="monospace" fontSize="9" fill="#111827">
+        {value}
+      </text>
+    </svg>
   );
 }
 
@@ -87,6 +176,17 @@ export function ProductDetailPage() {
   );
   const activeQr = selectedBatch ?? selectedSerial ?? product;
   const availableQuantity = Number(product?.available_quantity ?? 0);
+  const qrSummary = useMemo(
+    () => [
+      ['ID', activeQr?.id],
+      ['Type', activeQr?.type ?? 'product'],
+      ['Name', activeQr?.name ?? product?.name],
+      ['SKU', activeQr?.sku ?? product?.sku],
+      ['Barcode', activeQr?.barcode ?? product?.barcode ?? '—'],
+      ['Tracked', [product?.track_batch ? 'Batch' : null, product?.track_expiry ? 'Expiry' : null, product?.track_serial ? 'Serial' : null].filter(Boolean).join(', ') || 'Standard'],
+    ],
+    [activeQr, product],
+  );
 
   async function downloadLabels() {
     if (!product) return;
@@ -118,6 +218,7 @@ export function ProductDetailPage() {
     : selectedSerial
       ? `Serial QR · ${selectedSerial.serial_number}`
       : 'Product QR';
+  const barcodeValue = activeQr?.barcode ?? product.barcode ?? '—';
 
   return (
     <div className="space-y-6">
@@ -157,6 +258,13 @@ export function ProductDetailPage() {
                 ['Tracking', [product.track_batch ? 'Batch' : null, product.track_expiry ? 'Expiry' : null, product.track_serial ? 'Serial' : null].filter(Boolean).join(', ') || 'Standard'],
               ]}
             />
+            <div className="rounded-2xl border border-warelyn-border bg-white p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-warelyn-muted">Barcode</p>
+              <div className="mt-1 text-[10px] font-medium text-warelyn-text">{barcodeValue}</div>
+              <div className="mt-2">
+                <BarcodeSvg value={barcodeValue} />
+              </div>
+            </div>
             <div className="overflow-hidden rounded-2xl border border-warelyn-border">
               <div className="border-b border-warelyn-border bg-slate-50 px-4 py-3">
                 <h3 className="text-sm font-semibold text-warelyn-text">Stock by warehouse</h3>
@@ -196,17 +304,52 @@ export function ProductDetailPage() {
         <Card>
           <CardHeader>
             <h2 className="text-lg font-semibold text-warelyn-text flex items-center gap-2">
-              <QrCode size={18} className="text-warelyn-primary" />
+              <QrCode size={16} className="text-warelyn-primary" />
               {qrTitle}
             </h2>
           </CardHeader>
           <CardBody className="space-y-4">
-            <QrMatrix matrix={activeQr?.qr_matrix} />
-            <p className="text-xs text-warelyn-muted">
-              QR payload changes with the selected batch or serial so the tracking context stays printable and scannable.
-            </p>
-            <div className="rounded-xl border border-warelyn-border bg-slate-50 p-3 text-xs text-warelyn-muted break-words">
-              {activeQr?.qr_payload ?? 'No QR payload available.'}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[148px_minmax(0,1fr)] sm:items-start">
+              <div className="rounded-2xl border border-warelyn-border bg-white p-1.5 shadow-sm">
+                <QrMatrix matrix={activeQr?.qr_matrix} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-[10px] text-warelyn-muted">
+                  QR updates with the selected batch or serial.
+                </p>
+                <div className="rounded-xl border border-warelyn-border bg-slate-50 px-2 py-1.5 text-[10px] text-warelyn-muted">
+                  Compact tracking view for the selected item.
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2 rounded-xl border border-warelyn-border bg-white p-2.5 text-[11px] leading-5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-warelyn-muted">QR data</p>
+              <dl className="grid gap-1.5 md:grid-cols-2 md:gap-x-4">
+                {qrSummary.map(([label, value]) => (
+                  <CompactField key={label} label={label} value={value} />
+                ))}
+              </dl>
+              {selectedBatch ? (
+                <div className="rounded-lg bg-slate-50 p-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-warelyn-muted">Batch</p>
+                  <dl className="grid gap-1.5">
+                    <CompactField label="Batch #" value={selectedBatch.batch_number} />
+                    <CompactField label="Expiry" value={selectedBatch.expiry_date ?? '—'} />
+                    <CompactField label="Status" value={selectedBatch.status} />
+                  </dl>
+                </div>
+              ) : null}
+              {selectedSerial ? (
+                <div className="rounded-lg bg-slate-50 p-2">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-warelyn-muted">Serial</p>
+                  <dl className="grid gap-1.5">
+                    <CompactField label="Serial #" value={selectedSerial.serial_number} />
+                    <CompactField label="Batch #" value={selectedSerial.batch_number ?? '—'} />
+                    <CompactField label="Status" value={selectedSerial.status} />
+                  </dl>
+                </div>
+              ) : null}
             </div>
           </CardBody>
         </Card>
